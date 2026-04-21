@@ -43,94 +43,34 @@ telemetry.
 > [`docs/screenshots/README.md`](docs/screenshots/README.md) has the
 > filenames and push flow.
 
-## Architecture
+## How it works
 
-```
-       ┌─────────────────────── operator ────────────────────────┐
-       │                                                         │
-       │   laptop                            mobile              │
-       │   ┌────────────────┐                ┌─────────────────┐ │
-       │   │ claude code    │                │ slack (bridged  │ │
-       │   │ /teamfuse-*    │                │  into #leads)   │ │
-       │   │ admin MCP      │                │ approve / reply │ │
-       │   └───────┬────────┘                └────────┬────────┘ │
-       │           │                                  │          │
-       └───────────┼──────────────────────────────────┼──────────┘
-                   │                                  │
-                   ▼                                  ▼
-          ┌────────────────────────────────────────────────┐
-          │                                                │
-          │                A G E N T D M                   │
-          │                                                │
-          │         DMs  ·  #eng  ·  #leads  ·  #ops       │
-          │                                                │
-          └──┬───────┬───────┬───────┬───────┬─────────────┘
-             │       │       │       │       │
-             │       │       │       │       │   send_message
-             │       │       │       │       │   read_messages
-             ▼       ▼       ▼       ▼       ▼   (MCP over HTTPS)
-
-       ┌────────┬────────┬────────┬────────┬────────┐
-       │@pm-bot │@eng-bot│@qa-bot │@market │@analyst│
-       │        │        │        │(chrome)│        │
-       ├────────┼────────┼────────┼────────┼────────┤
-       │wrapper │wrapper │wrapper │wrapper │wrapper │
-       │ .py    │ .py    │ .py    │ .py    │ .py    │
-       │   │    │   │    │   │    │   │    │   │    │
-       │   ▼    │   ▼    │   ▼    │   ▼    │   ▼    │
-       │ claude │ claude │ claude │ claude │ claude │
-       │ stream │ stream │ stream │ stream │ stream │
-       │ -json  │ -json  │ -json  │ -json  │ -json  │
-       │        │        │        │        │        │
-       │ MCP:   │ MCP:   │ MCP:   │ MCP:   │ MCP:   │
-       │agentdm │agentdm │agentdm │agentdm │agentdm │
-       │github  │github  │github  │github  │postgres│
-       │        │context7│playwrt │ga4/gsc │(r/o)   │
-       └───┬────┴───┬────┴───┬────┴───┬────┴───┬────┘
-           │        │        │        │        │
-           │  status.json · sleep.json · tools.json
-           │  agent-loop.log · session JSONLs
-           │        │        │        │        │
-           ▼        ▼        ▼        ▼        ▼
-          ┌──────────────────────────────────────────────┐
-          │  teamfuse · control panel                    │
-          │  agents-web (Next.js) · 127.0.0.1:3005       │
-          │                                              │
-          │  ┌──┐   ┌──┐   ┌──┐   ┌──┐   ┌──┐           │
-          │  │● │   │● │   │● │   │● │   │● │   breakers│
-          │  │pm│   │eng│  │qa│   │mkt│  │ana│           │
-          │  └──┘   └──┘   └──┘   └──┘   └──┘           │
-          │                                              │
-          │  start · stop · wake · logs · usage bars    │
-          └──────────────────────┬───────────────────────┘
-                                 │
-                                 ▼
-                 spawn · SIGTERM · SIGUSR1
-                     per wrapper pid
-```
-
-Four layers, top to bottom:
+Four layers.
 
 1. **Operator.** Two entry points into the team. A laptop Claude Code
-   session runs `/teamfuse-*` commands (bootstrap, add agent, list,
+   session runs the `/teamfuse-*` commands (bootstrap, add agent, list,
    remove) against the AgentDM admin MCP. A mobile device reads the
-   `#leads` channel via a Slack bridge, so the operator sees urgent
-   escalations and approval requests on the phone.
+   `#leads` channel through a Slack bridge, so urgent escalations and
+   approval requests reach the operator on the phone.
 2. **AgentDM.** The messaging bus. Every agent-to-agent DM and every
    channel post goes through it. Nothing coordinates by polling the
    filesystem.
-3. **Agents.** Five persistent Claude Code sessions, one per role. Each
-   lives in `agents/<id>/` with its own `CLAUDE.md`, `MEMORY.md`, and
-   role-specific MCP servers. A thin Python wrapper keeps the `claude`
-   process hot across ticks via `stream-json` stdin/stdout, sends
-   `/clear` between completed units of work, and handles
-   signals (`SIGUSR1` to wake, `SIGTERM` to shut down). Marketing is
-   the only agent that launches `claude --chrome` since the host's
-   single browser session is shared.
+3. **Agents.** Five persistent Claude Code sessions, one per role.
+   Each lives in `agents/<id>/` with its own `CLAUDE.md`, `MEMORY.md`,
+   and role-specific MCP servers. A thin Python wrapper keeps the
+   `claude` process hot across ticks via `stream-json` stdin/stdout,
+   sends `/clear` between completed units of work, and handles signals
+   (`SIGUSR1` to wake, `SIGTERM` to shut down). Marketing is the only
+   agent that launches `claude --chrome`, since the host's single
+   browser session is shared.
 4. **Control panel.** A local Next.js dashboard at `127.0.0.1:3005`,
    shaped like an electrical load center. Each agent is a breaker
    card; the operator can start, stop, wake, read logs, inspect
    context and MCP tools, and watch token usage.
+
+Full writeup in [`docs/architecture.md`](docs/architecture.md). The
+streaming loop itself is covered in
+[`docs/streaming-agent-loop.md`](docs/streaming-agent-loop.md).
 
 ## What you get out of the box
 

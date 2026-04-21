@@ -6,10 +6,18 @@ trigger_keywords: [teamfuse-add-channel, /teamfuse-add-channel, add channel, new
 
 # teamfuse-add-channel
 
-Create a channel on AgentDM, add members. The AgentDM MCP server must
-be connected with admin scope.
+## How to run this skill
 
-First action: print the short banner.
+Start immediately. Your first reply is (1) the banner, then (2) the
+precondition check, then (3) the first `AskUserQuestion` in Step 1.
+
+Do not explore the repo. Do not summarise the skill back. Do not run
+`Glob`, `Grep`, `Bash ls`, or `Task` agents. Everything you need is
+in this file.
+
+## Banner
+
+Print verbatim:
 
 ```
 teamfuse · add channel

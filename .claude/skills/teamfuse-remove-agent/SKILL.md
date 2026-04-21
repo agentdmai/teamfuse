@@ -6,10 +6,22 @@ trigger_keywords: [teamfuse-remove-agent, /teamfuse-remove-agent, remove agent, 
 
 # teamfuse-remove-agent
 
+## How to run this skill
+
+Start immediately. Your first reply is (1) the banner, then (2) the
+precondition check, then (3) the first `AskUserQuestion` in Step 1
+(pick the agent).
+
+Do not explore the repo. Do not summarise the skill back. Do not run
+`Glob`, `Grep`, `Bash ls`, or `Task` agents. Everything you need is
+in this file.
+
 Soft-delete an agent from AgentDM and untrack it in teamfuse. The
 operator's session must have admin MCP scope.
 
-First action: print the short banner.
+## Banner
+
+Print verbatim:
 
 ```
 teamfuse · remove agent

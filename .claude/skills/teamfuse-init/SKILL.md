@@ -6,7 +6,31 @@ trigger_keywords: [teamfuse-init, teamfuse init, bootstrap, provision, set-up-co
 
 # teamfuse-init
 
-First action: print the teamfuse banner.
+## How to run this skill
+
+Start immediately. Your **first** reply must be (1) the banner, then
+(2) the precondition check, then (3) the first `AskUserQuestion` in
+Step 1. Nothing before the banner.
+
+Do **not** do any of these before starting:
+
+* Do not explore or map the repo. Everything you need to act is in
+  this file. File paths the flow touches are named explicitly below;
+  no other reads are required.
+* Do not summarise the skill back to the operator. Do not describe
+  what you are about to do. Do not ask for confirmation before
+  starting. The operator already confirmed by invoking
+  `/teamfuse-init`.
+* Do not run exploratory `Glob`, `Grep`, `Bash ls`, or `Task` agents.
+  The only tool you need for step-0 is `AskUserQuestion`. MCP admin
+  calls come later.
+
+If something is missing (preconditions fail, an MCP error code), stop
+and report the exact failure. Do not improvise a workaround.
+
+## Banner
+
+Print this verbatim before anything else.
 
 ```
  ████████╗███████╗ █████╗ ███╗   ███╗███████╗██╗   ██╗███████╗███████╗

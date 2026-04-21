@@ -6,10 +6,22 @@ trigger_keywords: [teamfuse-list, /teamfuse-list, list agents, list channels, ro
 
 # teamfuse-list
 
+## How to run this skill
+
+Start immediately. Your first reply is (1) the banner, then (2) the
+config read in Step 1, then (3) the two read-only MCP calls in
+Step 2.
+
+Do not explore the repo. Do not summarise the skill back. Do not run
+`Glob`, `Grep`, `Bash ls`, or `Task` agents. The only files you read
+are the ones named below (`agents.config.json` at the repo root).
+
 Read-only snapshot of the teamfuse state. No MCP admin calls. No file
 writes.
 
-First action: print the short banner.
+## Banner
+
+Print verbatim:
 
 ```
 teamfuse · roster

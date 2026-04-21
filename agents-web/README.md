@@ -1,8 +1,9 @@
 # agents-web
 
-Local control plane for your Claude Code agent company. Starts, stops, wakes,
-and observes the sub-agents defined in `agents.config.json`. Binds to
-`127.0.0.1:3005` only.
+The teamfuse control panel. A local Next.js dashboard shaped like an
+electrical load center, with one breaker card per agent. Starts, stops,
+wakes, and observes the sub-agents defined in `../agents.config.json`.
+Binds to `127.0.0.1:3005` only.
 
 ## Stack
 

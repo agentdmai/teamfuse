@@ -1,8 +1,8 @@
-# Setup walkthrough
+# teamfuse setup walkthrough
 
-This is the long form of the Quickstart in `README.md`. Read it if you want
-to understand what the bootstrap flow is doing before you run it, or if the
-flow failed partway through and you want to finish by hand.
+Long-form companion to the Quickstart in `README.md`. Read this if you
+want to understand what the bootstrap flow is doing before you run it,
+or if the flow failed partway through and you want to finish by hand.
 
 ## 0. What you should already have
 

@@ -1,51 +1,58 @@
-# claude-code-company-template
+# teamfuse
 
-A template for running a small company as a group of Claude Code agents that
-cooperate over [AgentDM](https://agentdm.ai). You get five starter roles
-(Product, Engineering, QA, Marketing, Analyst), a local Next.js control
-panel that starts and stops each agent as a persistent Claude Code session,
-and a bootstrap flow that provisions the whole thing end to end from a single
-Claude conversation.
+**Fuse five Claude Code agents into a working team.** Product, Engineering,
+QA, Marketing, and Analyst, coordinating over [AgentDM](https://agentdm.ai),
+orchestrated by a local Next.js control panel shaped like an electrical
+load center. Boot the whole company from a single `/bootstrap-company`
+prompt.
 
-## What you get
+```
+          ┌─── teamfuse ───┐
+ spark  → │ pm   eng   qa  │ → working
+ (one     │ mkt       ana  │   team
+ command) └─ main load ────┘
+```
 
-1. `agents-web/`. A Next.js control plane, cabinet style, one breaker per
-   agent. Start, stop, wake, read logs, read context, read MCP tools, see
-   token usage. Binds to `127.0.0.1:3005`.
-2. `agents/<role>/`. Five scrubbed sub-agent directories, each with a
-   placeholder `CLAUDE.md`, a `.mcp.json.example`, a `.env.example`, and a
-   spot for role-scoped skills.
-3. `agents/sop/`. Shared operating procedures for the whole company: card
-   lifecycle, WIP caps, wake protocol, PR review, commit attribution, release
-   validation, browser request format, DB access.
-4. `docs/`. How the thing is put together. The deep dive on the streaming
-   agent loop lives in `docs/streaming-agent-loop.md`.
-5. `.claude/skills/bootstrap-company/`. The bootstrap skill you invoke from
-   a Claude session at the repo root. It asks for the handful of company
-   specifics you need, provisions the AgentDM grid, and fills placeholders.
+## What you get out of the box
 
-## Prerequisites
+* **Five starter roles**, each a persistent Claude Code session with its
+  own `CLAUDE.md`, `MEMORY.md`, `.mcp.json`, and role-scoped skills.
+* **A local control panel** at `127.0.0.1:3005` with breaker-cabinet UI:
+  start, stop, wake, read logs, inspect context, inspect MCP tools, track
+  token usage per agent and per window (5h / 7d / since-start).
+* **A streaming agent loop** that keeps each Claude Code session hot
+  across ticks. One `claude` process per agent, stdin/stdout JSON,
+  `/clear` between units of work, SIGUSR1 wake, exponential backoff
+  sleep. Full writeup in `docs/streaming-agent-loop.md`.
+* **A shared SOP library** (`agents/sop/`): card lifecycle, WIP caps,
+  wake protocol, PR review, commit attribution, release validation,
+  browser requests, DB access.
+* **A bootstrap skill** that you run inside Claude Code. It asks for the
+  handful of specifics it needs, provisions the AgentDM grid via admin
+  MCP tools, writes `agents.config.json`, and fills every `<placeholder>`
+  in each role's `CLAUDE.md` with your real values.
 
-* Node 18.17+
-* Python 3.10+
-* [Claude Code CLI](https://docs.anthropic.com/claude/claude-code) installed
-* An [AgentDM](https://app.agentdm.ai) account
-* A GitHub account if you want the Eng / PM / QA roles to touch repos
-* A Postgres DSN if you want the Analyst role to read a production database
+## Who it is for
+
+You want a small autonomous team of AI coworkers that coordinate through
+a real messaging layer, with enough structure that they can actually ship
+(PRs, smoke tests, release gates, WIP caps), without writing the whole
+harness yourself. Typical users: solo founders, indie shops, internal
+ops teams automating a slice of their workflow.
 
 ## Quickstart
 
-### 1. Clone the template
+### 1. Clone
 
 ```bash
-gh repo create my-company --template claude-code-company-template --public
+gh repo create my-company --template agentdm/teamfuse --public
 cd my-company
 ```
 
 Or clone and re-init:
 
 ```bash
-git clone https://github.com/<you>/claude-code-company-template my-company
+git clone https://github.com/agentdm/teamfuse my-company
 cd my-company
 rm -rf .git && git init -b main
 ```
@@ -56,9 +63,7 @@ rm -rf .git && git init -b main
 cd agents-web && npm install && cd ..
 ```
 
-### 3. Authorise AgentDM from Claude Code
-
-Install the plugin and authorise once:
+### 3. Authorise AgentDM in Claude Code
 
 ```bash
 claude
@@ -66,37 +71,31 @@ claude
 > /reload-plugins
 ```
 
-Claude will print an OAuth URL. Open it, approve, come back. The plugin
-caches the token in the MCP client so you do not need to export it.
+Claude prints an OAuth URL. Open it, approve, come back. See
+`docs/agentdm-integration.md` for the account, alias, and channel model.
 
-See `docs/agentdm-integration.md` for the full model (accounts, aliases,
-channels, admin vs user tools).
+### 4. Fuse the team
 
-### 4. Run the bootstrap flow
-
-Still inside `claude` at the repo root:
+Inside the same Claude session, at the repo root:
 
 ```
 > /bootstrap-company
 ```
 
-The skill asks for:
+The skill asks for your company name, operator alias, which of the five
+roles to provision, and any role-specific bindings (GitHub org, Postgres
+DSN). It then:
 
-* Company name (used in the UI nameplate and commit attribution)
-* Operator alias (the human who reviews PRs and answers escalations)
-* Which of the five starter roles to provision (default: all five)
-* GitHub org, if you selected Eng, PM, or QA
-* Postgres DSN, if you selected Analyst
+* creates one AgentDM agent per role, stores each api key into
+  `agents/<id>/.env`
+* creates the `#eng`, `#leads`, `#ops` channels and seeds members
+* assigns role-appropriate skills via `admin_set_agent_skills`
+* writes `agents.config.json`
+* replaces every `<placeholder>` in the role `CLAUDE.md` files
 
-It then calls the AgentDM admin tools to create one agent per role, seeds
-three starter channels (`#eng`, `#leads`, `#ops`), assigns role-appropriate
-skills, writes `agents.config.json` at the repo root, and replaces every
-`<placeholder>` in each role's `CLAUDE.md` with the real value.
+Idempotent. Safe to rerun.
 
-API keys it receives from AgentDM go into `agents/<id>/.env`. Those files
-are gitignored.
-
-### 5. Start the control panel
+### 5. Light the panel
 
 ```bash
 cd agents-web
@@ -104,63 +103,61 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open `http://127.0.0.1:3005`. You should see one breaker card per agent,
-all stopped. Press Start on the first one. The wrapper forks, a persistent
-Claude Code session spins up in that agent's working directory, and
-`status.json` starts updating. Press the chevron to open the context,
-skills, and MCP modals.
+Open `http://127.0.0.1:3005`. One breaker card per agent, all stopped.
+Flip the first Start. The wrapper forks, `status.json` starts updating,
+and the log modal fills with tick output.
 
-### 6. What the agents actually do
+## Prerequisites
 
-Each agent runs a polling loop defined by its `CLAUDE.md`. The PM reads
-a project board, the Engineer picks up cards and commits, the QA runs
-tests, Marketing drafts content, the Analyst pulls metrics. They talk to
-each other and to you over AgentDM.
+* Node 18.17+
+* Python 3.10+
+* [Claude Code CLI](https://docs.anthropic.com/claude/claude-code)
+* An [AgentDM](https://app.agentdm.ai) account
+* A GitHub account (only if Eng, PM, or QA are provisioned)
+* A Postgres DSN (only if Analyst is provisioned)
 
-See `docs/architecture.md` for the full picture and
-`docs/streaming-agent-loop.md` for how the Claude Code session is kept
-persistent across ticks.
+## Docs
 
-## Docs index
-
-* `docs/architecture.md`. Three-piece picture: sub-agent sessions, the
-  control plane, the AgentDM messaging layer.
-* `docs/streaming-agent-loop.md`. Deep explainer on `scripts/agent-loop.py`.
-  Why a persistent session, stdin/stdout JSON framing, control files,
-  signals, backoff sleep, cost tracking.
-* `docs/agentdm-integration.md`. Accounts, aliases, channels, admin vs user
-  MCP tools, the OAuth flow, guardrails.
-* `docs/creating-agents.md`. How to add a new role or reshape an existing
-  one.
-* `docs/operator-guide.md`. Daily ops. Starting, stopping, waking, reading
-  logs, the master breaker, usage windows.
-* `docs/extending.md`. Adding MCP servers, adding skills, optional patterns
-  (Gmail intake, Google Ads automation, browser work via Chrome).
+| | |
+|---|---|
+| [Architecture](docs/architecture.md) | Three pieces: sub-agent sessions, control plane, messaging layer. |
+| [Streaming agent loop](docs/streaming-agent-loop.md) | Deep dive on `scripts/agent-loop.py`. Why persistent sessions, JSON framing, control files, signals, backoff, crash recovery, cost accounting. |
+| [AgentDM integration](docs/agentdm-integration.md) | Accounts, aliases, channels, admin vs user MCP tools, OAuth, guardrails. |
+| [Creating agents](docs/creating-agents.md) | Three paths: edit a starter, copy the `TEMPLATE/` skeleton, or replace the lineup entirely. |
+| [Operator guide](docs/operator-guide.md) | Daily ops: start, stop, wake, context, skills, MCP tools, usage windows, master breaker. |
+| [Extending](docs/extending.md) | Adding MCP servers, skills, guardrails, optional patterns (Gmail intake, paid ads, browser work). |
 
 ## Layout
 
 ```
 .
-├── README.md
-├── SETUP.md
-├── LICENSE
+├── README.md                           you are here
+├── SETUP.md                            long-form bootstrap walkthrough
+├── LICENSE                             MIT
 ├── .gitignore
 ├── .claude/
 │   ├── settings.example.json
-│   └── skills/bootstrap-company/SKILL.md
-├── .mcp.json.example
-├── agents.config.example.json
-├── docs/
+│   └── skills/bootstrap-company/       the bootstrap flow
+├── .mcp.json.example                   AgentDM MCP, copy to .mcp.json
+├── agents.config.example.json          copy to agents.config.json during bootstrap
+├── docs/                               six markdown docs
 ├── agents/
-│   ├── TEMPLATE/            blank agent skeleton
-│   ├── pm-bot/              placeholderised starter role
+│   ├── TEMPLATE/                       blank agent skeleton
+│   ├── pm-bot/                         placeholderised starter roles
 │   ├── eng-bot/
 │   ├── qa-bot/
 │   ├── marketing/
 │   ├── analyst/
-│   └── sop/                 shared operating procedures
-└── agents-web/              Next.js control panel
+│   └── sop/                            shared operating procedures
+└── agents-web/                         Next.js control panel
 ```
+
+## Naming
+
+The product is teamfuse: a team fused into existence. The metaphor runs
+through the UI (load center, breakers, LIVE indicator) and the repo
+structure. It is not a reference to any other Fuse, TeamFusion, or Spark
+product you may have seen.
 
 ## License
 

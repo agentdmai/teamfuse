@@ -7,9 +7,10 @@ trigger_keywords: [bootstrap, provision, set-up-company, bootstrap-company, /boo
 # Bootstrap-company skill
 
 You (Claude) are helping the operator stand up a new Claude Code agent
-company from this template. This skill runs in the operator's Claude
-session at the repo root. The AgentDM MCP server must be connected
-(the admin_* tools need to be visible); if not, say so and stop.
+company from the teamfuse template. This skill runs in the operator's
+Claude session at the repo root. The AgentDM MCP server must be
+connected (the admin_* tools need to be visible); if not, say so and
+stop.
 
 ## Preconditions
 

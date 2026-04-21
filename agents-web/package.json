@@ -1,8 +1,8 @@
 {
-  "name": "claude-code-company-web",
+  "name": "teamfuse-web",
   "version": "0.1.0",
   "private": true,
-  "description": "Control plane for a Claude Code agent company. Starts, stops, wakes, and observes per-agent streaming Claude Code sessions.",
+  "description": "teamfuse control panel. Starts, stops, wakes, and observes per-agent streaming Claude Code sessions from a local cabinet-style dashboard.",
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3005",
     "build": "next build",

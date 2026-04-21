@@ -131,6 +131,7 @@ cd agents-web && npm install && cd ..
 claude
 > /plugin install agentdm@agentdm
 > /reload-plugins
+> /mcp -> AgentDM -> Authenitcate
 ```
 
 Claude prints an OAuth URL. Open it, approve, come back. See

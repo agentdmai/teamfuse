@@ -107,7 +107,7 @@ ops teams automating a slice of their workflow.
 ### 1. Clone
 
 ```bash
-gh repo create my-company --template agentdmai/teamfuse --private
+gh repo create my-company --template agentdmai/teamfuse --private --clone
 cd my-company
 ```
 
@@ -134,7 +134,10 @@ claude
 > /mcp -> AgentDM -> Authenitcate
 ```
 
-Claude prints an OAuth URL. Open it, approve, come back. See
+Claude prints an OAuth URL. Open it, pick **Authenticate**, sign in with
+Google or GitHub, and when AgentDM asks which agent to connect as, pick
+**Admin Agent** — the bootstrap commands need admin scope to create
+agents and channels. Then come back to the terminal. See
 `docs/agentdm-integration.md` for the account, alias, and channel model.
 
 ### 4. Say hi
@@ -154,15 +157,35 @@ else is available.
 > /teamfuse-init
 ```
 
-Asks for your company name, operator alias, which of the five roles to
-provision, and any role-specific bindings (GitHub org, Postgres DSN).
+Asks for your company name, a short brief (what the company does, what
+the product is, who it is for, one-line positioning), operator alias,
+which of the five roles to provision, and any role-specific bindings
+(GitHub org, Postgres DSN). The brief is stored once in
+`agents/sop/company.md` and loaded by every agent on start-up, so all
+five roles share the same ground truth about the business.
+
+It also offers to:
+
+* **Create the GitHub Project board** for you (same pattern as agent
+  creation on AgentDM) — `gh project create`, seed the standard
+  `Status`, `Agent`, `Type`, `Source`, and `Output link` fields, and
+  resolve every field ID into the per-agent `CLAUDE.md` placeholders.
+  You can also paste an existing board URL, or skip and fill it in
+  later.
+* **Wire your existing local clones** into `@eng-bot` and `@qa-bot`.
+  Give it an absolute path (and an optional short name) and it lays
+  the `agents/eng-bot/repos/<name>` and `agents/qa-bot/repos/<name>`
+  symlinks for you — no need to do it by hand.
+
 It then:
 
 * creates one AgentDM agent per role, stores each api key into
   `agents/<id>/.env`
 * creates the `#eng`, `#leads`, `#ops` channels and seeds members
 * assigns role-appropriate skills via `admin_set_agent_skills`
-* writes `agents.config.json`
+* creates / resolves the project board and captures its field IDs
+* symlinks each wired repo into eng's and qa's `./repos/`
+* writes `agents.config.json` and `agents/sop/company.md`
 * replaces every `<placeholder>` in the role `CLAUDE.md` files
 
 Idempotent. Safe to rerun.
@@ -172,6 +195,7 @@ Idempotent. Safe to rerun.
 ```bash
 cd agents-web
 cp .env.example .env.local
+npm install
 npm run dev
 ```
 

@@ -124,13 +124,17 @@ def write_session_settings() -> list[str]:
             if d.is_dir() and (d / "SKILL.md").is_file():
                 skill_names.append(d.name)
 
-    settings: dict = {"permissions": {}, "hooks": {}}
-    if skill_names:
-        allow = []
-        for n in skill_names:
-            allow.append(f"Skill({n})")
-            allow.append(f"Skill({n} *)")
-        settings["permissions"] = {"deny": ["Skill"], "allow": allow}
+    # Strict skill isolation: always deny the Skill tool by default so the
+    # agent never inherits the operator's user-level skill library, and only
+    # allow the per-agent skills that live under ./.claude/skills/.
+    allow: list[str] = []
+    for n in skill_names:
+        allow.append(f"Skill({n})")
+        allow.append(f"Skill({n} *)")
+    settings: dict = {
+        "permissions": {"deny": ["Skill"], "allow": allow},
+        "hooks": {},
+    }
 
     log_tpl = (
         'date -u "+[%FT%TZ] hook:{event} — {note}" '
@@ -174,8 +178,16 @@ class ClaudeSession:
             "--dangerously-skip-permissions",
             "--model", "opusplan",
         ]
-        if (AGENT_DIR / ".mcp.json").is_file():
-            args += ["--mcp-config", ".mcp.json", "--strict-mcp-config"]
+        # Strict MCP isolation: never inherit the operator's user-level
+        # servers. If the agent has its own .mcp.json we use it; otherwise
+        # we point at an empty file so `--strict-mcp-config` loads nothing.
+        mcp_path = AGENT_DIR / ".mcp.json"
+        if not mcp_path.is_file():
+            empty_mcp = ORCH_DIR / "empty-mcp.json"
+            if not empty_mcp.is_file():
+                empty_mcp.write_text('{"mcpServers":{}}')
+            mcp_path = empty_mcp
+        args += ["--mcp-config", str(mcp_path), "--strict-mcp-config"]
         if SETTINGS.is_file():
             args += ["--settings", str(SETTINGS)]
         if CHROME:

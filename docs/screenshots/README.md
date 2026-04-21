@@ -1,38 +1,50 @@
 # screenshots
 
-Drop two images here. The root `README.md` references them by exact
-filename, so name them as follows:
+Two images for the README's "What it looks like" section.
 
-## `control-panel.png`
+## Current state: SVG simulations
 
-A screenshot of the teamfuse control panel at `http://127.0.0.1:3005`
-with all five agent breakers running. Ideally:
+The repo ships with hand-drawn SVG simulations:
 
-* window roughly 1200 by 900, so the cabinet fits without scrollbars
-* every agent card expanded enough to show the state dot
-* at least one card with the log modal or context modal open, to hint
-  at what the chevron reveals
+* `control-panel.svg`, drawn from the actual `agents-web` component
+  structure (breaker cards, usage panel, master breaker, cabinet
+  nameplate). Reflects one plausible running state: two agents working,
+  one sleeping, one starting, one querying.
+* `agentdm-network.svg`, a roster + graph mockup of the five teamfuse
+  agents and the three seeded channels on AgentDM. Includes a recent
+  feed panel on the right so the image reads as a live team.
 
-Captured via your OS screenshot tool (macOS: `Cmd+Shift+4`, then drag).
+Both are inline-rendered by GitHub as if they were PNGs.
 
-## `agentdm-network.png`
+## Replacing with real captures
 
-A screenshot of the AgentDM dashboard's network view
-(`app.agentdm.ai`) showing the five teamfuse agents and the seeded
-channels. Ideally:
+Capture the real dashboards whenever you want. Naming convention: PNG,
+same base names, next to the SVGs.
 
-* the agent roster visible (`@pm-bot`, `@eng-bot`, `@qa-bot`,
-  `@marketing`, `@analyst`)
-* the channel list visible (`#eng`, `#leads`, `#ops`)
-* recent activity indicator on at least one edge so the image shows
-  the team is actually talking
+### `control-panel.png`
 
-## Pushing them
+The teamfuse control panel at `http://127.0.0.1:3005` with all five
+agent breakers running. Ideal window roughly 1200 by 900, every agent
+card in view, one card with the log or context modal open to hint at
+what the chevron reveals. macOS: `Cmd+Shift+4`, drag the window.
+
+### `agentdm-network.png`
+
+The AgentDM dashboard (`app.agentdm.ai`), network view, showing the
+five teamfuse aliases (`@pm-bot`, `@eng-bot`, `@qa-bot`, `@marketing`,
+`@analyst`) and the three seeded channels (`#eng`, `#leads`, `#ops`).
+
+### Switching the README over to PNGs
+
+Edit the root `README.md` and swap `.svg` for `.png` in the two
+`![...]` image references, then:
 
 ```bash
 cd /path/to/teamfuse
-# drop control-panel.png and agentdm-network.png into docs/screenshots/
-git add docs/screenshots/control-panel.png docs/screenshots/agentdm-network.png
-git commit -m "Add teamfuse screenshots to README"
+git add docs/screenshots/control-panel.png docs/screenshots/agentdm-network.png README.md
+git commit -m "Replace SVG simulations with real screenshots"
 git push
 ```
+
+(You can also keep both. The repo does not mind; GitHub just renders
+whichever one the README points at.)

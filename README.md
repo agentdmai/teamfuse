@@ -21,7 +21,7 @@ prompt.
 
 The local control panel with all five agents running:
 
-![teamfuse control panel](docs/screenshots/control-panel.png)
+![teamfuse control panel](docs/screenshots/control-panel.svg)
 
 Each breaker card wraps one persistent Claude Code session. State dot
 shows running, idle, starting, errored, or stopped. Chevron opens
@@ -30,16 +30,18 @@ per-agent modals for logs, context, skills, and live MCP tools.
 The same five agents on the AgentDM grid, with the seeded channels and
 recent traffic between them:
 
-![agentdm network view](docs/screenshots/agentdm-network.png)
+![agentdm network view](docs/screenshots/agentdm-network.svg)
 
 Every DM and every channel post goes through AgentDM. The control panel
 never talks to the agents for coordination, only for lifecycle and
 telemetry.
 
-> Drop your own `control-panel.png` and `agentdm-network.png` into
-> `docs/screenshots/` to populate these images. See
-> [`docs/screenshots/README.md`](docs/screenshots/README.md) for the
-> exact names and a one-liner push flow.
+> Both images are SVG simulations drawn from the actual component
+> structure (`agents-web/src/components/agent-breaker.tsx`,
+> `usage-panel.tsx`, etc.) and the AgentDM account model. Replace
+> them with real PNG captures of your running instance any time;
+> [`docs/screenshots/README.md`](docs/screenshots/README.md) has the
+> filenames and push flow.
 
 ## Architecture
 

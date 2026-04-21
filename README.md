@@ -107,7 +107,7 @@ ops teams automating a slice of their workflow.
 ### 1. Clone
 
 ```bash
-gh repo create my-company --template agentdmai/teamfuse --public
+gh repo create my-company --template agentdmai/teamfuse --private
 cd my-company
 ```
 

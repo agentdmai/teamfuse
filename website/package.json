@@ -1,0 +1,40 @@
+{
+  "name": "teamfuse-website",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Landing page and docs site for teamfuse. Hosted at teamfuse.dev.",
+  "scripts": {
+    "prebuild": "node scripts/sync-docs.mjs",
+    "predev": "node scripts/sync-docs.mjs",
+    "dev": "next dev -p 3006",
+    "build": "next build",
+    "start": "next start -p 3006",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "gray-matter": "^4.0.3",
+    "lucide-react": "^0.460.0",
+    "next": "^16.2.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-slug": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "19.0.1",
+    "@types/react-dom": "19.0.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.0",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.17"
+  }
+}

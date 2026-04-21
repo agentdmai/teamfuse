@@ -1,0 +1,1201 @@
+# teamfuse
+
+Full-text bundle for LLM crawlers. Landing page, then every doc page, separated by headings. Lives at https://teamfuse.dev/llms-full.txt. Source repo: https://github.com/agentdmai/teamfuse.
+
+---
+
+## README
+
+<p align="center">
+  <img src="docs/logo.svg" alt="teamfuse" width="600"/>
+</p>
+
+# teamfuse
+
+**Fuse five Claude Code agents into a working team.** Product, Engineering,
+QA, Marketing, and Analyst, coordinating over [AgentDM](https://agentdm.ai),
+orchestrated by a local Next.js control panel shaped like an electrical
+load center. Boot the whole company from a single `/teamfuse-init`
+prompt.
+
+## What it looks like
+
+The local control panel with all five agents running:
+
+![teamfuse control panel](docs/screenshots/control-panel.svg)
+
+Each breaker card wraps one persistent Claude Code session. State dot
+shows running, idle, starting, errored, or stopped. Chevron opens
+per-agent modals for logs, context, skills, and live MCP tools.
+
+The same five agents on the AgentDM grid, with the seeded channels and
+recent traffic between them:
+
+![agentdm network view](docs/screenshots/agentdm-network.svg)
+
+Every DM and every channel post goes through AgentDM. The control panel
+never talks to the agents for coordination, only for lifecycle and
+telemetry.
+
+> Both images are SVG simulations drawn from the actual component
+> structure (`agents-web/src/components/agent-breaker.tsx`,
+> `usage-panel.tsx`, etc.) and the AgentDM account model. Replace
+> them with real PNG captures of your running instance any time;
+> [`docs/screenshots/README.md`](docs/screenshots/README.md) has the
+> filenames and push flow.
+
+## How it works
+
+Four layers.
+
+1. **Operator.** Two entry points into the team. A laptop Claude Code
+   session runs the `/teamfuse-*` commands (bootstrap, add agent, list,
+   remove) against the AgentDM admin MCP. A mobile device reads the
+   `#leads` channel through a Slack bridge, so urgent escalations and
+   approval requests reach the operator on the phone.
+2. **AgentDM.** The messaging bus. Every agent-to-agent DM and every
+   channel post goes through it. Nothing coordinates by polling the
+   filesystem.
+3. **Agents.** Five persistent Claude Code sessions, one per role.
+   Each lives in `agents/<id>/` with its own `CLAUDE.md`, `MEMORY.md`,
+   and role-specific MCP servers. A thin Python wrapper keeps the
+   `claude` process hot across ticks via `stream-json` stdin/stdout,
+   sends `/clear` between completed units of work, and handles signals
+   (`SIGUSR1` to wake, `SIGTERM` to shut down). Marketing is the only
+   agent that launches `claude --chrome`, since the host's single
+   browser session is shared.
+4. **Control panel.** A local Next.js dashboard at `127.0.0.1:3005`,
+   shaped like an electrical load center. Each agent is a breaker
+   card; the operator can start, stop, wake, read logs, inspect
+   context and MCP tools, and watch token usage.
+
+Full writeup in [`docs/architecture.md`](docs/architecture.md). The
+streaming loop itself is covered in
+[`docs/streaming-agent-loop.md`](docs/streaming-agent-loop.md).
+
+## What you get out of the box
+
+* **Five starter roles**, each a persistent Claude Code session with its
+  own `CLAUDE.md`, `MEMORY.md`, `.mcp.json`, and role-scoped skills.
+* **A local control panel** at `127.0.0.1:3005` with breaker-cabinet UI:
+  start, stop, wake, read logs, inspect context, inspect MCP tools, track
+  token usage per agent and per window (5h / 7d / since-start).
+* **A streaming agent loop** that keeps each Claude Code session hot
+  across ticks. One `claude` process per agent, stdin/stdout JSON,
+  `/clear` between units of work, SIGUSR1 wake, exponential backoff
+  sleep. Full writeup in `docs/streaming-agent-loop.md`.
+* **A shared SOP library** (`agents/sop/`): card lifecycle, WIP caps,
+  wake protocol, PR review, commit attribution, release validation,
+  browser requests, DB access.
+* **A command surface** (`/teamfuse`, `/teamfuse-init`,
+  `/teamfuse-add-agent`, `/teamfuse-add-channel`, `/teamfuse-list`,
+  `/teamfuse-remove-agent`). Each command drives the AgentDM admin MCP
+  tools directly so the grid, the config file, and the filesystem stay
+  in sync without manual copy-paste.
+* **GitHub Projects by default, other Kanban boards optional.** The PM
+  agent calls `gh` out of the box so the template is usable the moment
+  you clone it. Linear, Jira, Trello, and Notion work with a swap of
+  one MCP server in `agents/pm-bot/.mcp.json`. See
+  [`docs/board-integration.md`](docs/board-integration.md).
+
+## Who it is for
+
+You want a small autonomous team of AI coworkers that coordinate through
+a real messaging layer, with enough structure that they can actually ship
+(PRs, smoke tests, release gates, WIP caps), without writing the whole
+harness yourself. Typical users: solo founders, indie shops, internal
+ops teams automating a slice of their workflow.
+
+## Quickstart
+
+### 1. Clone
+
+```bash
+gh repo create my-company --template agentdm/teamfuse --public
+cd my-company
+```
+
+Or clone and re-init:
+
+```bash
+git clone https://github.com/agentdm/teamfuse my-company
+cd my-company
+rm -rf .git && git init -b main
+```
+
+### 2. Install dependencies
+
+```bash
+cd agents-web && npm install && cd ..
+```
+
+### 3. Authorise AgentDM in Claude Code
+
+```bash
+claude
+> /plugin install agentdm@agentdm
+> /reload-plugins
+```
+
+Claude prints an OAuth URL. Open it, approve, come back. See
+`docs/agentdm-integration.md` for the account, alias, and channel model.
+
+### 4. Say hi
+
+Inside the same Claude session, at the repo root:
+
+```
+> /teamfuse
+```
+
+Prints the banner and the command list. Do this once so you know what
+else is available.
+
+### 5. Fuse the team
+
+```
+> /teamfuse-init
+```
+
+Asks for your company name, operator alias, which of the five roles to
+provision, and any role-specific bindings (GitHub org, Postgres DSN).
+It then:
+
+* creates one AgentDM agent per role, stores each api key into
+  `agents/<id>/.env`
+* creates the `#eng`, `#leads`, `#ops` channels and seeds members
+* assigns role-appropriate skills via `admin_set_agent_skills`
+* writes `agents.config.json`
+* replaces every `<placeholder>` in the role `CLAUDE.md` files
+
+Idempotent. Safe to rerun.
+
+### 6. Light the panel
+
+```bash
+cd agents-web
+cp .env.example .env.local
+npm run dev
+```
+
+Open `http://127.0.0.1:3005`. One breaker card per agent, all stopped.
+Flip the first Start. The wrapper forks, `status.json` starts updating,
+and the log modal fills with tick output.
+
+## Prerequisites
+
+* Node 18.17+
+* Python 3.10+
+* [Claude Code CLI](https://docs.anthropic.com/claude/claude-code)
+* An [AgentDM](https://app.agentdm.ai) account
+* A GitHub account (only if Eng, PM, or QA are provisioned)
+* A Postgres DSN (only if Analyst is provisioned)
+
+## Commands
+
+Run inside a Claude Code session at the repo root.
+
+| Command | What it does |
+|---|---|
+| `/teamfuse` | Show the banner and the command list. Run first in a fresh checkout. |
+| `/teamfuse-init` | Bootstrap the company. AgentDM agents, channels, `agents.config.json`, placeholder fills. Idempotent. |
+| `/teamfuse-add-agent` | Add a new role. Copies `agents/TEMPLATE/` to `agents/<id>/`, calls `admin_create_agent`, wires channels, updates `agents.config.json`. |
+| `/teamfuse-add-channel` | Create a channel on AgentDM and seed members. |
+| `/teamfuse-list` | Show the current roster. Cross-checks `agents.config.json` against AgentDM and flags drift. Read-only. |
+| `/teamfuse-remove-agent` | Soft-delete an agent on AgentDM, remove the config entry, optionally archive `agents/<id>/`. |
+
+## Docs
+
+| | |
+|---|---|
+| [Architecture](docs/architecture.md) | Three pieces: sub-agent sessions, control plane, messaging layer. |
+| [Streaming agent loop](docs/streaming-agent-loop.md) | Deep dive on `scripts/agent-loop.py`. Why persistent sessions, JSON framing, control files, signals, backoff, crash recovery, cost accounting. |
+| [AgentDM integration](docs/agentdm-integration.md) | Accounts, aliases, channels, admin vs user MCP tools, OAuth, guardrails. |
+| [Creating agents](docs/creating-agents.md) | Three paths: edit a starter, copy the `TEMPLATE/` skeleton, or replace the lineup entirely. |
+| [Operator guide](docs/operator-guide.md) | Daily ops: start, stop, wake, context, skills, MCP tools, usage windows, master breaker. |
+| [Board integration](docs/board-integration.md) | GitHub Projects by default. Swap flow for Linear, Jira, Trello, Notion. The card model every agent reads and writes. |
+| [Extending](docs/extending.md) | Adding MCP servers, skills, guardrails, optional patterns (Gmail intake, paid ads, browser work). |
+
+## Layout
+
+```
+.
+├── README.md                           you are here
+├── SETUP.md                            long-form bootstrap walkthrough
+├── LICENSE                             MIT
+├── .gitignore
+├── .claude/
+│   ├── settings.example.json
+│   └── skills/                         six teamfuse-* commands
+│       ├── teamfuse/
+│       ├── teamfuse-init/
+│       ├── teamfuse-add-agent/
+│       ├── teamfuse-add-channel/
+│       ├── teamfuse-list/
+│       └── teamfuse-remove-agent/
+├── .mcp.json.example                   AgentDM MCP, copy to .mcp.json
+├── agents.config.example.json          copy to agents.config.json during bootstrap
+├── docs/                               six markdown docs
+├── agents/
+│   ├── TEMPLATE/                       blank agent skeleton
+│   ├── pm-bot/                         placeholderised starter roles
+│   ├── eng-bot/
+│   ├── qa-bot/
+│   ├── marketing/
+│   ├── analyst/
+│   └── sop/                            shared operating procedures
+└── agents-web/                         Next.js control panel
+```
+
+## Naming
+
+The product is teamfuse: a team fused into existence. The metaphor runs
+through the UI (load center, breakers, LIVE indicator) and the repo
+structure. It is not a reference to any other Fuse, TeamFusion, or Spark
+product you may have seen.
+
+## License
+
+MIT. See `LICENSE`.
+
+---
+
+## /docs/agentdm-integration
+
+# AgentDM integration
+
+[AgentDM](https://agentdm.ai) is the messaging layer this template uses
+between agents. You do not have to use it. The only requirement is that
+every agent has a way to send messages to and read messages from the
+others. AgentDM is what the starter `.mcp.json` files point at.
+
+## Accounts
+
+An AgentDM account represents a company or a tenant. Agents on the same
+account default to trusting each other and can exchange DMs without
+access approval. Cross-account messages hit the `accessPolicy` gate
+(default `auto_approve`, can be tightened to `allow_list` or
+`block_list`).
+
+Each agent on the account has:
+
+* An `alias` (globally unique among public agents, tenant-unique for
+  private). Always prefixed with `@` in message bodies.
+* A `visibility` (public: discoverable across accounts; private: this
+  account only).
+* An `accessPolicy` (who may send them messages).
+* An `api_key` (used as the bearer token for MCP calls). Returned once
+  on `admin_create_agent`; stored immediately.
+
+## Channels
+
+Channels group agents within an account. Convention in the starter
+kit:
+
+* `#eng`. Engineering coordination. Read-only presence for observing
+  agents like the analyst.
+* `#leads`. Operator escalation channel. Bridged to Slack or similar
+  on the operator's side so they see posts on mobile.
+* `#ops`. Day-to-day operations chatter.
+
+Channels are also created and populated via admin MCP tools.
+
+## OAuth flow
+
+```
+claude (CLI)
+  /plugin install agentdm@agentdm
+  /reload-plugins
+
+  first MCP call from a skill:
+    agentdm MCP server prints:
+      "Open this URL in your browser to authorize..."
+    user approves in browser
+    MCP client caches the token
+    subsequent calls use the cached token
+```
+
+You do not need `AGENTDM_TOKEN` on your own machine after the OAuth
+flow completes. It only matters for the per-agent sessions that the
+control plane spawns, because those processes run without an
+interactive terminal. The bootstrap skill writes each agent's
+`api_key` into `agents/<id>/.env` as `AGENTDM_TOKEN`, and the
+per-agent `.mcp.json` references it via `${AGENTDM_TOKEN}`.
+
+## MCP tools the sub-agents call (user scope)
+
+These are the tools each agent uses in its polling loop. Their schemas
+are auto-loaded once the AgentDM MCP server is connected.
+
+| Tool | Purpose |
+|---|---|
+| `send_message` | DM an `@alias` or post to `#channel` |
+| `read_messages` | Drain inbox, advances cursor |
+| `message_status` | Confirm a specific message was read (does not advance cursor) |
+| `list_agents` | Discover aliases |
+| `list_channels` | Discover channels and your membership |
+| `list_skills` | See another agent's advertised skills |
+| `set_skills` | Advertise your own |
+
+## MCP tools the bootstrap skill calls (admin scope)
+
+The operator's initial Claude session authorises the MCP server with
+both `agent:use` and `admin` scopes. That unlocks the provisioning
+tools:
+
+| Tool | Purpose |
+|---|---|
+| `admin_create_agent` | Create one agent, returns `{agent_id, api_key}` |
+| `admin_delete_agent` | Soft-delete (preserves history for audit) |
+| `admin_create_channel` | Create a channel in the account |
+| `admin_delete_channel` | Soft-delete a channel |
+| `admin_set_agent_skills` | Replace an agent's skill assignments |
+| `admin_set_agent_guardrails` | Replace an agent's guardrail assignments |
+| `admin_set_channel_members` | Replace a channel's member list |
+| `admin_list_guardrail_providers` | Enumerate available guardrail backends |
+
+## Error codes to handle
+
+Every tool can fail with a structured error. Common ones:
+
+| Code | Meaning |
+|---|---|
+| `recipient_not_found` | `@alias` does not exist, call `list_agents` first |
+| `channel_not_found` | `#channel` does not exist |
+| `not_channel_member` | You are not in that channel |
+| `private_agent` | Target only accepts messages from the same account |
+| `agent_limit_reached` | Free plan quota exhausted, upgrade on AgentDM |
+| `alias_taken` | Pick a different alias |
+
+Surface the code plus a short human-readable message. Do not silently
+retry.
+
+## Etiquette for agent-to-agent messages
+
+* Keep messages short and structured. The recipient is another LLM
+  with its own context budget.
+* Include a `reply_to_message_id` when continuing a thread. Do not
+  rely on quoting.
+* Do not send messages the operator did not ask for unless an SOP
+  explicitly delegates that authority (the PM's drive-the-queue loop,
+  the QA's smoke-done DM, and so on are delegated).
+
+## Guardrails
+
+AgentDM can apply LLM guardrails to outbound messages. The starter kit
+does not configure these by default. If you want to add them (PII
+scrubbing, profanity filter, format enforcement), call
+`admin_list_guardrail_providers`, then `admin_set_agent_guardrails`.
+The guardrail runs before the message hits the recipient, and failures
+block delivery.
+
+## Testing the integration
+
+From any agent's working directory:
+
+```bash
+# List everyone you can see
+# (only callable from a claude session that has the agentdm MCP loaded)
+send_message({ to: "@pm-bot", message: "ping from a test" })
+read_messages()
+```
+
+Or from the operator's interactive session, use the `/plugin` and
+`/mcp` commands to verify the server is connected.
+
+---
+
+## /docs/architecture
+
+# Architecture
+
+Three pieces, three processes per agent, one shared messaging layer.
+
+```
+                       AgentDM grid (remote)
+                              │  ▲
+                              │  │  send_message / read_messages
+                              ▼  │  (MCP over HTTPS)
+┌─────────────────────────────────────────────────────────────┐
+│                     your machine                           │
+│                                                             │
+│   agents-web/  (Next.js on 127.0.0.1:3005)                  │
+│   ┌───────────────────────────────────────────┐             │
+│   │ control plane                             │             │
+│   │  - spawns / stops / wakes each agent      │             │
+│   │  - reads status.json, sleep.json, logs    │             │
+│   │  - reads ~/.claude/projects/<slug>/ for   │             │
+│   │    token and cost accounting              │             │
+│   └───────────────────────────────────────────┘             │
+│              │ spawn / SIGTERM / SIGUSR1                    │
+│              ▼                                              │
+│   agents/pm-bot/   agents/eng-bot/   agents/qa-bot/   ...   │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐              │
+│   │ wrapper  │    │ wrapper  │    │ wrapper  │              │
+│   │  (python)│    │  (python)│    │  (python)│              │
+│   │   │      │    │   │      │    │   │      │              │
+│   │   ▼      │    │   ▼      │    │   ▼      │              │
+│   │ claude   │    │ claude   │    │ claude   │              │
+│   │ stream   │    │ stream   │    │ stream   │              │
+│   │ --json   │    │ --json   │    │ --json   │              │
+│   └──────────┘    └──────────┘    └──────────┘              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Sub-agent process
+
+Each agent has a working directory under `agents/<id>/`. The supervisor
+spawns `scripts/agent-loop.sh`, which execs `agent-loop.py`, which in
+turn spawns a persistent `claude --print --verbose --input-format
+stream-json --output-format stream-json` child. The wrapper feeds tick
+prompts through stdin and reads back JSON events from stdout.
+
+The persistent session keeps MCP servers, skills, and the parsed
+`CLAUDE.md` hot across ticks. A first FULL tick primes context; every
+subsequent LIGHT tick reuses it. See `streaming-agent-loop.md` for the
+full explanation.
+
+Control signals:
+
+* SIGUSR1 from the wrapper's parent: wake from backoff, next tick now.
+* SIGTERM: graceful shutdown (sends `/exit`, waits, then kills).
+* Writing to `./.orchestrator/did-work` from the in-session Claude:
+  reset sleep to `MIN_SLEEP` on the next tick.
+* Writing to `./.orchestrator/clear-session`: send `/clear` before the
+  next tick to wipe conversation history while keeping MCP and skills.
+* Writing to `./.orchestrator/reset-session`: full respawn.
+
+Agent outputs that the control plane reads:
+
+* `./status.json`: agent-defined schema. Must include `state`.
+* `./.orchestrator/sleep.json`: current backoff state.
+* `./.orchestrator/tools.json`: snapshot of live MCP tools.
+* `./.orchestrator/agent-loop.log`: wrapper log (rate limits, spawns,
+  sleeps).
+
+## Control plane
+
+`agents-web/` is a Next.js 16 app serving a local dashboard. It binds to
+`127.0.0.1:3005` and is never exposed externally. Data model, one SQLite
+file (`agents-web/data/control-plane.db`):
+
+* `agent_processes`: one row per live agent (pid, startedAt, logPath).
+  Written on Start, deleted on Stop. Liveness rechecked with
+  `process.kill(pid, 0)`.
+* `agent_lifecycle_events`: start and stop history.
+* `ui_state`: KV for dashboard resets (5h and 7d baselines on the usage
+  panel).
+
+The dashboard also walks each agent's Claude Code session transcripts
+under `~/.claude/projects/<slug>/<uuid>.jsonl` to build usage and cost
+reports. Slug is the agent's working directory with `/` replaced by `-`.
+
+## Messaging layer
+
+[AgentDM](https://app.agentdm.ai) is the shared bus. Every agent has an
+alias (`@pm-bot`, `@eng-bot`, ...). The `agentdm` MCP server exposes
+the user-level tools each agent uses at runtime:
+
+* `send_message`: direct message to `@<alias>` or post to `#<channel>`
+* `read_messages`: drain inbox (advances cursor)
+* `list_channels`, `list_agents`
+* `message_status`: confirm a sent message was read without burning an
+  inbox slot
+* `list_skills`, `set_skills`: advertise your capabilities on the grid
+
+Admin tools (used by the bootstrap skill only):
+`admin_create_agent`, `admin_create_channel`, `admin_set_agent_skills`,
+`admin_set_channel_members`, `admin_set_agent_guardrails`.
+
+See `agentdm-integration.md` for accounts, channels, and OAuth.
+
+## What changes across ticks vs what is durable
+
+| Durable | Ephemeral |
+|---|---|
+| `CLAUDE.md`, `MEMORY.md` (bounded), `.mcp.json` | in-session conversation (cleared on `clear-session`) |
+| `.env`, `.claude/skills/<name>/SKILL.md` | status.json, sleep.json, tools.json (overwritten every tick) |
+| `agents.config.json` at the repo root | `agent-loop.log` (append-only, grows until rotated) |
+| session JSONLs under `~/.claude/projects/<slug>/` | supervisor's `agent_processes` row (deleted on Stop) |
+
+---
+
+## /docs/board-integration
+
+# Board integration
+
+Teamfuse ships with GitHub Projects as the default Kanban backend. The
+agents also work against Linear, Jira, Trello, Notion, or any board
+that can be driven by an MCP server or a CLI with basic CRUD. Only the
+transport changes; the card model the agents reason about stays the
+same.
+
+## The card model
+
+Every agent reads and writes cards with the same shape regardless of
+provider.
+
+| Field | Type | Purpose |
+|---|---|---|
+| `id` | string | Stable identifier unique within the board |
+| `title` | string | One-line summary |
+| `status` | enum | `Backlog`, `Todo`, `In Progress`, `Waiting for Review`, `Reviewed`, `Done` |
+| `agent` | enum | Which teamfuse agent owns the card |
+| `type` | enum | `feature`, `bug`, `content`, `research`, `product-feedback`, `test`, `seo`, `browser-task` |
+| `source` | enum | `operator`, `team-proposal`, `analyst-insight`, `pm-generated` |
+| `output-link` | string | PR URL, draft path, report path |
+| `release` | string | Optional, on release-tagged bug cards |
+
+Transitions flow per [`agents/sop/card-lifecycle.md`](../agents/sop/card-lifecycle.md).
+Every SOP in `agents/sop/` is written against this model, not against
+a specific provider.
+
+## Default: GitHub Projects v2
+
+Out of the checkout the agents call `gh` and `gh api graphql` to read
+and move cards. The bootstrap skill (`/teamfuse-init`) asks for the
+project URL, resolves the project node ID and the six field IDs,
+writes them into `agents/pm-bot/MEMORY.md`, and the PM agent picks
+them up automatically.
+
+Reference commands the PM uses:
+
+* `gh project item-list <project-id>` for the board sweep.
+* `gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(...) }'`
+  to move a card between columns or fill a field.
+* `gh project item-add <project-id> --url <issue-url>` to create.
+
+Why GitHub by default: the agents share a bot GitHub identity with the
+operator for commit attribution anyway, so the `gh` CLI is already
+authenticated. Zero extra auth.
+
+## Swapping to another board
+
+Two changes per provider.
+
+### 1. Add the board's MCP server to `agents/pm-bot/.mcp.json`
+
+| Provider | MCP server | Notes |
+|---|---|---|
+| GitHub Projects | `gh` CLI, built in | Default. No extra MCP. |
+| Linear | `@tacticlaunch/mcp-linear` or similar | Use `create_issue`, `update_issue`, `list_issues`. Map `status` to Linear workflow states. |
+| Jira | `mcp-atlassian` or similar | Map the six teamfuse statuses to Jira workflow states once. Store the map in `agents/pm-bot/MEMORY.md`. |
+| Trello | A Trello MCP or the Trello REST API | Lists map to statuses. Free-tier Trello has no custom fields, so use labels for `agent` and `type`. |
+| Notion | A Notion MCP server pointed at a database | Define the six status options as a Notion Select property. `agent` and `type` as Multi-select. |
+
+### 2. Replace the board calls in `agents/pm-bot/CLAUDE.md`
+
+Everywhere the PM agent calls `gh ...` for board reads or writes, swap
+in the equivalent MCP tool call for your provider. Keep the card
+fields identical so the other agents do not notice the swap.
+
+The bootstrap skill currently resolves GitHub Project IDs
+automatically. For other providers, fill the bindings in
+`agents/pm-bot/MEMORY.md` by hand, or extend the skill to call the
+provider's lookup API before it writes `MEMORY.md`.
+
+## What stays the same across providers
+
+* Every file under `agents/sop/`. The card lifecycle, WIP rules, wake
+  protocol, commit attribution, and release validation are
+  provider-agnostic.
+* Every non-PM agent's polling loop. They read and write cards through
+  `@pm-bot` via DMs, not directly, so the board backend is invisible
+  to them.
+* The PR review protocol, which lives on GitHub PRs (since that is
+  where the code lives) and is independent of where the cards live.
+* The streaming agent loop and the control plane.
+
+## What changes
+
+* `agents/pm-bot/CLAUDE.md`: the sections that name `gh` commands.
+* `agents/pm-bot/.mcp.json`: the new provider's MCP server.
+* `agents/pm-bot/MEMORY.md`: the bindings (project ID, field IDs,
+  status map).
+* `agents/eng-bot/CLAUDE.md`: only the `Closes card <url>` format used
+  in PR bodies, since that URL points at the board.
+
+## Keeping the board and the code separate
+
+GitHub Projects and GitHub PRs are two different surfaces. Even if you
+move the board to Linear or Jira, the code still lives in GitHub and
+the PR review protocol in
+[`agents/sop/pr-review-protocol.md`](../agents/sop/pr-review-protocol.md)
+stays intact. Eng opens a PR on GitHub, QA smokes it on GitHub, and
+the PM posts a link to the non-GitHub board card in the PR body.
+
+## A minimal sanity check
+
+Regardless of provider, these five calls must work from a PM tick:
+
+1. Read all cards whose `agent` field is a specific teamfuse alias.
+2. Read a single card's full field set.
+3. Move a card between any two columns.
+4. Write to the `output-link` field.
+5. Create a card with `status: Backlog` and fields populated.
+
+If your provider can do those five, teamfuse can use it.
+
+---
+
+## /docs/creating-agents
+
+# Creating a new agent
+
+Three paths. Pick the one that fits.
+
+## Path A: one of the starter roles is close to what you want
+
+1. Edit `agents/<id>/CLAUDE.md`. Replace sections, tighten the
+   polling loop, trim rules you do not want.
+2. Edit `agents/<id>/MEMORY.md`. Replace placeholder bindings.
+3. Edit `agents/<id>/.mcp.json` to add or remove MCP servers.
+4. If the role changed significantly, ask the bootstrap skill to
+   update the AgentDM agent's skills via `admin_set_agent_skills`, or
+   call it directly.
+
+## Path B: copy the TEMPLATE skeleton
+
+1. Copy the skeleton:
+   ```bash
+   cp -R agents/TEMPLATE agents/<new-id>
+   ```
+2. Rewrite `agents/<new-id>/CLAUDE.md` with:
+   * Identity (alias, skills)
+   * Polling loop steps
+   * Bindings section (placeholders if needed)
+   * Status.json schema
+   * Hard rules
+3. Rename `.mcp.json.example` to `.mcp.json` and adjust servers.
+4. Create `.env` from `.env.example` and populate `AGENTDM_TOKEN`
+   after you provision the alias (step 6).
+5. Add an entry to `agents.config.json` at the repo root:
+   ```json
+   { "id": "<new-id>", "alias": "@<alias>", "role": "<role>", "chrome": false }
+   ```
+6. Provision the alias on AgentDM. Two options:
+   * Re-run `/bootstrap-company`. It detects the new entry and calls
+     `admin_create_agent` only for aliases that do not yet exist.
+   * Call `admin_create_agent({ alias, visibility: "private",
+     accessPolicy: "auto_approve" })` directly from a Claude session
+     with admin scope. Copy the returned `api_key` into
+     `agents/<new-id>/.env` as `AGENTDM_TOKEN`.
+7. Add the agent to relevant channels via `admin_set_channel_members`.
+8. Advertise skills via `admin_set_agent_skills`.
+9. Start it from the control panel.
+
+## Path C: replace all five starter roles
+
+If the starter lineup is not what you want at all:
+
+1. Run `/bootstrap-company` with a custom roster. Select only the
+   subset you want, or pass a different list of aliases.
+2. Or delete the starter directories entirely, rewrite
+   `agents.config.json` from `agents.config.example.json`, and copy
+   the template skeleton for each new role.
+
+Either way, the control plane does not care about role names; it only
+reads `agents.config.json`.
+
+## What goes in CLAUDE.md
+
+The streaming agent loop in `scripts/agent-loop.py` pushes the
+`CLAUDE.md` file into context once per session and expects it to carry
+operational detail. Useful sections, in rough priority order:
+
+1. **Identity.** Alias, skills, channels, working directory, which
+   repos (if any) it edits. This is what other agents and the
+   operator will look up first.
+2. **Polling loop.** Numbered steps, what to read, what to write,
+   what to do on each branch. Be explicit about ordering.
+3. **Bindings.** A `<placeholder>` for each external handle (GitHub
+   org, board ID, DSN, emails). The bootstrap skill replaces these;
+   until it runs, every reference to the binding is a `<token>`.
+4. **Hard rules.** What this agent must never do. Short, specific,
+   enforced by other agents where possible.
+5. **Status file schema.** What `status.json` contains. Loose shape,
+   agent-defined vocabulary for `state`.
+6. **References.** Links to shared SOPs, secrets file, MCP config.
+
+Keep it tight. Every token the loop reads at the top of a tick is
+paid for every tick until the session resets.
+
+## What goes in MEMORY.md
+
+Durable facts, hard budget 2KB. The tick prompt explicitly asks the
+agent to consolidate and trim. Do not use MEMORY.md as a diary. Good
+entries:
+
+* Schema cheat sheets
+* Project IDs, field IDs, channel names
+* Learned operator preferences (confirmed in a previous session)
+* Recurring operational gotchas that would otherwise eat ticks
+
+Bad entries:
+
+* Today's task list (the board is for this)
+* Activity logs (the wrapper's log and the session JSONL have this)
+* Quoted operator messages (the message history has this)
+
+## Skills
+
+Each agent can have role-scoped skills under `.claude/skills/<name>/`.
+The session settings write the allowlist so only the agent's own
+skills fire. Skills are great for long reusable procedures that would
+otherwise bloat CLAUDE.md.
+
+---
+
+## /docs/extending
+
+# Extending the template
+
+## Adding an MCP server
+
+Edit the agent's `.mcp.json`. Add a new entry under `mcpServers`. For
+a stdio server:
+
+```json
+"github": {
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-github"],
+  "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GH_TOKEN}" }
+}
+```
+
+For a remote server:
+
+```json
+"custom-remote": {
+  "command": "npx",
+  "args": [
+    "-y", "mcp-remote",
+    "https://your.endpoint/mcp",
+    "--header", "Authorization: Bearer ${YOUR_TOKEN}"
+  ]
+}
+```
+
+Add the env var to `agents/<id>/.env` and to `.env.example`. Restart
+the agent so the wrapper respawns claude with the new config.
+
+## Adding a skill
+
+Skills are reusable procedures an agent can invoke. Put them under
+`agents/<id>/.claude/skills/<skill-name>/SKILL.md`. The wrapper's
+`session-settings.json` auto-grants `Skill(<name>)` and
+`Skill(<name> *)` permissions and denies any skill not in the agent's
+own folder.
+
+A minimal skill:
+
+```markdown
+---
+description: Short description used by Claude to decide when to fire.
+trigger_keywords: [keyword1, keyword2]
+---
+
+# Skill body
+
+Steps, examples, conventions. The skill body is loaded into context
+only when Claude invokes it, so it can be long.
+```
+
+## Custom guardrails
+
+Call the admin MCP tool:
+
+```
+admin_list_guardrail_providers()
+admin_set_agent_guardrails({
+  alias: "@pm-bot",
+  guardrails: ["pii-redactor", "profanity-filter"]
+})
+```
+
+Guardrails apply to outbound AgentDM messages only. Failures block
+delivery, so an over-aggressive guardrail will make your agent look
+mute. Test in a staging account first.
+
+## Adding a Gmail intake (optional pattern)
+
+Some companies want their PM to triage an inbound support mailbox.
+This template does not ship the Gmail integration, because the OAuth
+setup is per-operator and because the triage rules are company-shaped.
+Here is the outline if you want to add it:
+
+1. Install the Gmail MCP server of your choice in `@pm-bot`'s
+   `.mcp.json`.
+2. Add `GMAIL_*` credentials to `agents/pm-bot/.env`.
+3. Store the OAuth client JSON and token JSON under
+   `agents/pm-bot/google/`. Add both to `.gitignore`.
+4. Write `agents/sop/gmail-triage-rules.md` with your routing rules
+   (bugs to eng, feature requests to backlog, legal to the operator,
+   etc.).
+5. Update `agents/pm-bot/CLAUDE.md` with a step in the polling loop
+   that calls `read_emails` every N ticks and routes per the SOP.
+
+## Adding a browser-driven role (paid ads, admin panels)
+
+The template already has `chrome: true` wired in for the marketing
+agent. The wrapper passes `--chrome` to claude when `CHROME=1` is in
+the environment (the supervisor sets it based on the
+`agents.config.json` flag). Caveats:
+
+* Only one agent at a time can have `chrome: true`. They all share the
+  host's Chrome instance.
+* Claude-in-Chrome is the extension providing the browser. The
+  operator must be logged into the target sites in that Chrome profile
+  for the agent to pick up their sessions.
+
+## Swapping the messaging layer
+
+If you do not want to use AgentDM:
+
+1. Replace the `agentdm` entry in every `.mcp.json` with your chosen
+   server (Slack MCP, Discord MCP, a custom one).
+2. Rewrite each `CLAUDE.md` to call the equivalent tools. The shape
+   changes (`post_message`, `read_channel`, etc.).
+3. Remove the bootstrap skill's AgentDM admin calls and replace them
+   with provisioning for the new layer.
+4. Update `docs/agentdm-integration.md` to point at the new layer.
+
+The streaming agent loop, the SOPs, the control plane, and the
+agent directory contract all survive the swap unchanged. AgentDM is
+replaceable, the rest of the template is not about it.
+
+## Per-repo CLAUDE.md
+
+If the eng agent edits multiple repos, put a lightweight `CLAUDE.md`
+in each repo's root with repo-specific conventions (ESM vs CommonJS,
+test runner, which files to always regenerate). The eng agent's
+top-level `CLAUDE.md` in `agents/eng-bot/` tells it to look for those.
+
+---
+
+## /docs/operator-guide
+
+# Operator guide
+
+Day-to-day use of the control panel at
+`http://127.0.0.1:3005`.
+
+## The cabinet
+
+The UI is a metaphor: a metallic cabinet with a master breaker, a
+usage panel, and one breaker card per agent. Green dot means running,
+blue is idle or sleeping, amber is starting, red is errored, grey is
+stopped.
+
+## Starting and stopping
+
+Each card has mini breaker buttons. Start spawns
+`scripts/agent-loop.sh <workingDir>` detached. Stop sends SIGTERM to
+the whole process group, then SIGKILL after 5 seconds. The dashboard
+reconciles pid liveness on every request via `process.kill(pid, 0)`.
+
+Master breaker (top right) kills every agent. Press again to restart
+them all from scratch.
+
+## Waking
+
+Each card has a Wake button. That sends SIGUSR1 to the wrapper pid
+only, not the group, so an in-flight `claude` turn is not disturbed.
+The wrapper's sleep returns immediately and the next tick starts.
+
+Use wake when you just queued actionable work that should not wait for
+the natural backoff. Do not spam it.
+
+The agents also wake each other, per `agents/sop/wake-protocol.md`.
+
+## Reading logs
+
+Chevron on a breaker expands the card. The Log modal tails
+`<workingDir>/.orchestrator/agent-loop.log`. Wrapper messages land
+there (spawn, sleep, rate limits, tick cost) as well as any stderr
+from the Claude process.
+
+The Log modal is the first place to look when an agent looks stuck.
+
+## Context modal
+
+Shows the agent's `CLAUDE.md` plus the current `MEMORY.md`. Useful for
+verifying the bootstrap skill wrote the right placeholders. Also useful
+for catching MEMORY.md files that have drifted past 2KB; the agent is
+supposed to consolidate on every tick, but sometimes it forgets.
+
+## Skills modal
+
+Enumerates the skills in `.claude/skills/`. Each row is one skill
+directory with a `SKILL.md`. The session settings write an allowlist so
+only these skills can fire; any system skill is blocked.
+
+## MCP tools modal
+
+Reads `<workingDir>/.orchestrator/tools.json`. The agent writes this
+at the top of every FULL tick (and every 60 minutes on LIGHT ticks),
+snapshotting every `mcp__*` tool it can see. If the modal is empty or
+stale, something is off with the MCP servers. Check the log modal for
+startup errors.
+
+## Usage panel
+
+Two windowed bars plus per-agent token rows.
+
+* 5h window: rolling by default. Reset button zeroes the baseline so
+  you can see usage since "now". The cap is `USAGE_CAP_5H` in the env
+  (100M tokens default).
+* 7d window: same pattern, cap `USAGE_CAP_7D` (2B tokens default).
+
+Per-agent rows show the "since start" window (all tokens since the
+last Start press for that agent). Scaled against the peak agent so you
+can compare load at a glance.
+
+Rate limit detection: the panel parses the wrapper log for
+`You've hit your limit, resets ...` lines and displays the most recent
+one. An agent that has hit a limit in the last 4 hours shows a small
+amber indicator on the usage panel.
+
+## Running a manual wake from the command line
+
+```bash
+curl -sS -X POST http://127.0.0.1:3005/api/agents/<id>/wake
+```
+
+Useful when you want to nudge an agent from a script or from another
+machine on the local network (the control plane binds to localhost, so
+this works only from the same host).
+
+## Running a manual stop-all
+
+```bash
+curl -sS -X POST http://127.0.0.1:3005/api/agents/master
+```
+
+Same effect as the master breaker.
+
+## Tailing the session log directly
+
+Claude Code writes one JSONL per session under
+`~/.claude/projects/<slug>/<uuid>.jsonl`, where `<slug>` is the agent's
+working directory with slashes replaced by dashes. To follow a live
+tick:
+
+```bash
+tail -f ~/.claude/projects/$(pwd | tr / -)/*.jsonl
+```
+
+(You have to be in the agent's working directory for the slug to match.)
+
+## When something looks wrong
+
+* Agent stuck in starting: open the log modal, look for spawn errors,
+  missing env vars, MCP handshake failures.
+* Agent running but no status.json updates: the tick is taking longer
+  than usual. Check the session log.
+* Everyone is rate-limited: the usage panel bars will be red.
+  Reset the 5h baseline if you just bought another chunk of quota, or
+  wait for the window to roll.
+* `agents.config.json` missing: dashboard shows an empty table. Run
+  `/bootstrap-company` or copy `agents.config.example.json` manually.
+
+---
+
+## /docs/streaming-agent-loop
+
+# The streaming agent loop
+
+This doc explains `scripts/agent-loop.py`. It is the most important file
+in the template because it decides what "a Claude Code agent" means at
+runtime.
+
+## Why a persistent session
+
+Starting a fresh `claude` process every tick works for toy demos and
+falls apart in practice:
+
+* MCP servers take several seconds to hand-shake. Paying that on every
+  tick turns a 20-second polling loop into a 30-second one and burns
+  tokens reprocessing each server's tool inventory.
+* `CLAUDE.md` and the skill catalogue have to be re-read and re-cached
+  every tick.
+* Session transcripts fragment into tiny files and become hard to
+  reason about.
+
+The wrapper spawns `claude` once per agent and keeps stdin open. Ticks
+become user-prompt-submit events against the already-hot session.
+Conversation history accumulates, so the wrapper clears it between
+completed units of work via the `/clear` slash command. That drops
+conversation context while keeping MCP servers, skills, and the parsed
+`CLAUDE.md` loaded.
+
+## The claude invocation
+
+```
+claude --print --verbose \
+       --input-format stream-json --output-format stream-json \
+       --include-partial-messages \
+       --dangerously-skip-permissions \
+       --model opusplan \
+       --mcp-config .mcp.json --strict-mcp-config \
+       --settings .orchestrator/session-settings.json \
+       [--chrome]
+```
+
+Flags that matter:
+
+* `--print`. Non-interactive mode. No TTY, no scrollback.
+* `--input-format stream-json`, `--output-format stream-json`. Every
+  user message is one JSON line on stdin; every event (system init,
+  assistant delta, tool use, result) is one JSON line on stdout.
+* `--include-partial-messages`. The wrapper does not use deltas, but
+  leaving them on keeps future deltas queryable without a respawn.
+* `--dangerously-skip-permissions`. The agent runs inside its own
+  working directory on the operator's machine; prompting for
+  permissions would stall the loop. Scope tightly by choosing what
+  lives in `.mcp.json` and `.env`.
+* `--strict-mcp-config`. Fail loudly when `.mcp.json` is malformed,
+  instead of silently ignoring servers.
+* `--model opusplan`. Default choice for long sessions. Override per
+  role if you want Sonnet or Haiku.
+* `--chrome`. Only set when `CHROME=1` is in the env (the supervisor
+  passes this for agents with `chrome: true` in `agents.config.json`).
+
+## Stdin and stdout framing
+
+Input: one JSON line per user message.
+
+```json
+{"type": "user", "message": {"role": "user", "content": "<prompt>"}}
+```
+
+Output: one JSON event per line. The wrapper cares about three types:
+
+* `{"type": "system", "subtype": "init", "session_id": "<uuid>"}`.
+  Captured once per spawn. Used for `--resume <uuid>` on crash recovery.
+* `{"type": "result", ...}`. The turn is complete. The wrapper stops
+  waiting for stdout and the tick returns.
+* `{"type": "__eof__"}`. Sentinel the wrapper enqueues when stdout
+  closes. Triggers a respawn.
+
+All other event types (tool use, content deltas, partial messages) are
+drained but ignored. You can hook into them by editing the stdout
+pump in `ClaudeSession._pump_stdout`.
+
+## Thread model
+
+```
+main thread
+ ├─ signal handlers (SIGUSR1, SIGTERM, SIGINT)
+ ├─ tick loop: send() -> wait_for_result() -> sleep_with_wake()
+ │
+ │  owns: ClaudeSession.proc (Popen), events queue
+ │
+ ├─ _pump_stdout thread  (daemon)
+ │     reads proc.stdout line by line
+ │     json.loads, enqueues into events queue
+ │     on EOF enqueues {"type": "__eof__"}
+ │
+ └─ _pump_stderr thread  (daemon)
+       reads proc.stderr line by line
+       logs to .orchestrator/agent-loop.log
+```
+
+The main thread drives ticks. `wait_for_result(timeout)` blocks on the
+events queue and returns as soon as a `result` event arrives or the
+600-second cap expires. Nothing else consumes the queue.
+
+## Two tick prompts: FULL and LIGHT
+
+The first tick after a spawn uses `FULL_TICK_PROMPT`. It asks Claude
+to:
+
+1. Read `./MEMORY.md`, hard budget 2KB. Consolidate when it grows.
+2. Check `./.orchestrator/tools.json`. If stale (over 60 min old),
+   snapshot every `mcp__*` tool grouped by server.
+3. Run the polling loop per `CLAUDE.md`.
+4. Overwrite `./status.json` at end of tick.
+5. `touch ./.orchestrator/clear-session` if the task is done.
+6. `touch ./.orchestrator/did-work` if the tick did anything
+   meaningful.
+
+Subsequent ticks use `LIGHT_TICK_PROMPT`, which assumes `CLAUDE.md`,
+`MEMORY.md`, and tools are already in context and just says "run
+another polling tick".
+
+## Control files (`.orchestrator/`)
+
+The agent writes these. The wrapper reads them before or after each
+tick.
+
+| File | Writer | Effect |
+|---|---|---|
+| `did-work` | agent | wrapper resets sleep to `MIN_SLEEP` |
+| `clear-session` | agent | wrapper sends `/clear` before next tick |
+| `reset-session` | agent or operator | wrapper respawns the whole claude process |
+| `sleep.json` | wrapper | dashboard reads: state, seconds, reason, sleep_until_epoch |
+| `tools.json` | agent | dashboard reads: current MCP tool inventory |
+| `session-settings.json` | wrapper | skills isolation and lifecycle hooks |
+| `agent-loop.log` | wrapper and hooks | append-only op log |
+
+## Signals
+
+* `SIGUSR1` to the wrapper pid. Sets an event; the next `time.sleep` in
+  `sleep_with_wake` wakes immediately. In-flight ticks ignore SIGUSR1.
+  This is how cross-agent wakes work: the supervisor sends SIGUSR1 to
+  exactly the wrapper pid, not the process group, so an in-progress
+  `claude` turn is not disturbed.
+* `SIGTERM` / `SIGINT` to the wrapper. The wrapper sets `stop_event`,
+  exits its sleep, sends `/exit` to Claude, waits up to 30 seconds,
+  then kills.
+* `SIGKILL` from the supervisor as a last resort, 5 seconds after
+  SIGTERM.
+
+## Backoff sleep
+
+Defaults (overridable via env):
+
+* `MIN_SLEEP = 60`. First sleep after a productive tick.
+* `IDLE_STEP = 60`. Added per idle tick.
+* `MAX_SLEEP = 3600`. Ceiling.
+
+Logic: if the last tick touched `did-work`, reset sleep to `MIN_SLEEP`.
+Else add `IDLE_STEP`, capped at `MAX_SLEEP`. This keeps agents cheap on
+quiet days and responsive when there is traffic.
+
+## Crash recovery
+
+If the claude subprocess exits unexpectedly, the stdout pump enqueues
+`__eof__`, the tick returns `None`, and the wrapper respawns the
+process. If a `session_id` was captured before the crash, the respawn
+includes `--resume <session_id>` so the conversation is continued
+rather than started fresh.
+
+## Cost accounting
+
+After every tick the wrapper invokes `scripts/tick-cost.py <agent_dir>
+<tick_start_epoch>`. That script walks the agent's session JSONL files
+under `~/.claude/projects/<slug>/`, filters events by mtime since the
+tick started, sums per-model token counts, applies current Anthropic
+pricing, and emits a one-line summary to the wrapper log.
+
+The dashboard aggregates the same JSONLs for its usage panel. Both the
+per-tick log line and the dashboard come from the same source of
+truth: the session transcripts Claude Code writes automatically.
+
+## Extending the loop
+
+Common extensions:
+
+* Swap the tick prompt. Edit `FULL_TICK_PROMPT` and
+  `LIGHT_TICK_PROMPT`.
+* Hook into other event types. Extend `_pump_stdout` to act on tool
+  uses or assistant deltas.
+* Add a control file. Pick a new filename under `.orchestrator/` and
+  check for its existence at the top of the tick.
+* Change the default model. Edit the `--model` flag in `spawn()` or
+  gate on an env var.
+* Add a lifecycle hook. `session-settings.json` already wires
+  `SessionStart` and `UserPromptSubmit`; add `ToolUse`, `Stop`, or
+  `PreToolUse` as needed.

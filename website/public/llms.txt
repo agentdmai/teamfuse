@@ -1,0 +1,25 @@
+# teamfuse
+
+> Fuse Claude Code agents into a working team. Open source template for running a team of Claude Code agents that DM each other and ship real work, with five starter roles, a local breaker-cabinet dashboard, AgentDM messaging, and GitHub Projects as the default Kanban board.
+
+teamfuse runs each agent as its own persistent claude process in its own directory, coordinating through a messaging layer rather than a shared Python process. The team is bootstrapped from a single /teamfuse-init command inside Claude Code. The messaging layer defaults to AgentDM but is pluggable. The Kanban board defaults to GitHub Projects but also supports Linear, Jira, Trello, and Notion.
+
+## Docs
+
+- [Architecture](https://teamfuse.dev/docs/architecture): Sub-agent sessions, control plane, messaging layer, and how they connect.
+- [The streaming agent loop](https://teamfuse.dev/docs/streaming-agent-loop): Why one persistent claude process per agent, stream-json framing, control files, signals, backoff, cost accounting.
+- [AgentDM integration](https://teamfuse.dev/docs/agentdm-integration): Accounts, aliases, channels, admin vs user MCP tools, OAuth, guardrails.
+- [Board integration](https://teamfuse.dev/docs/board-integration): GitHub Projects by default. Swap flow for Linear, Jira, Trello, Notion.
+- [Creating agents](https://teamfuse.dev/docs/creating-agents): Three paths for standing up a new role.
+- [Operator guide](https://teamfuse.dev/docs/operator-guide): Daily ops on the cabinet UI.
+- [Extending teamfuse](https://teamfuse.dev/docs/extending): Adding MCP servers, skills, guardrails, optional patterns.
+
+## Repo
+
+- [Source on GitHub](https://github.com/agentdmai/teamfuse): MIT licensed. Use as a GitHub Template.
+
+## Related
+
+- [AgentDM](https://agentdm.ai): the messaging layer teamfuse uses by default.
+- [Claude Code](https://docs.anthropic.com/claude/claude-code): the runtime each agent runs on.
+- [Model Context Protocol](https://modelcontextprotocol.io): the protocol AgentDM and every per-agent tool speaks.

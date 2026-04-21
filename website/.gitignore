@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Synced at build time from ../README.md and ../docs/
+src/content/
+!src/content/.keep
+
+.env
+.env.local
+.env.*.local
+.DS_Store
+.vercel

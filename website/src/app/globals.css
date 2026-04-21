@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-panel-900 text-slate-100 antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Prose overrides for docs pages */
+.prose-teamfuse {
+  @apply text-slate-200 leading-relaxed;
+}
+.prose-teamfuse h1 {
+  @apply text-3xl font-bold tracking-tight text-slate-50 mt-10 mb-6;
+}
+.prose-teamfuse h2 {
+  @apply text-2xl font-semibold tracking-tight text-slate-50 mt-10 mb-4 pb-2 border-b border-panel-700;
+}
+.prose-teamfuse h3 {
+  @apply text-xl font-semibold text-slate-50 mt-8 mb-3;
+}
+.prose-teamfuse h4 {
+  @apply text-lg font-semibold text-slate-100 mt-6 mb-2;
+}
+.prose-teamfuse p {
+  @apply my-4;
+}
+.prose-teamfuse a {
+  @apply text-bolt-400 underline underline-offset-2 decoration-bolt-400/40 hover:decoration-bolt-400 transition-colors;
+}
+.prose-teamfuse strong {
+  @apply text-slate-50 font-semibold;
+}
+.prose-teamfuse ul {
+  @apply my-4 pl-6 list-disc marker:text-slate-500;
+}
+.prose-teamfuse ol {
+  @apply my-4 pl-6 list-decimal marker:text-slate-500;
+}
+.prose-teamfuse li {
+  @apply my-1.5;
+}
+.prose-teamfuse code {
+  @apply font-mono text-[0.9em] px-1.5 py-0.5 rounded bg-panel-800 text-bolt-300 border border-panel-700;
+}
+.prose-teamfuse pre {
+  @apply my-6 p-4 overflow-x-auto rounded-lg bg-panel-800 border border-panel-700 text-sm leading-relaxed;
+}
+.prose-teamfuse pre code {
+  @apply bg-transparent border-0 p-0 text-slate-200 font-mono;
+}
+.prose-teamfuse blockquote {
+  @apply my-6 pl-4 border-l-4 border-bolt-500/50 text-slate-300 italic;
+}
+.prose-teamfuse table {
+  @apply my-6 w-full border-collapse overflow-hidden rounded-lg border border-panel-700;
+}
+.prose-teamfuse th {
+  @apply bg-panel-800 text-slate-100 text-left px-4 py-2 font-semibold border-b border-panel-700;
+}
+.prose-teamfuse td {
+  @apply px-4 py-2 border-b border-panel-700/60 text-slate-300;
+}
+.prose-teamfuse tr:last-child td {
+  @apply border-b-0;
+}
+.prose-teamfuse hr {
+  @apply my-8 border-t border-panel-700;
+}
+.prose-teamfuse img {
+  @apply my-6 rounded-lg border border-panel-700 max-w-full;
+}

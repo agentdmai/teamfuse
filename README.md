@@ -107,14 +107,14 @@ ops teams automating a slice of their workflow.
 ### 1. Clone
 
 ```bash
-gh repo create my-company --template agentdm/teamfuse --public
+gh repo create my-company --template agentdmai/teamfuse --public
 cd my-company
 ```
 
 Or clone and re-init:
 
 ```bash
-git clone https://github.com/agentdm/teamfuse my-company
+git clone https://github.com/agentdmai/teamfuse my-company
 cd my-company
 rm -rf .git && git init -b main
 ```

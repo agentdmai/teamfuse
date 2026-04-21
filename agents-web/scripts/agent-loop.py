@@ -22,10 +22,11 @@ Protocol files under ./.orchestrator/:
   agent-loop.log   — op log (wrapper + lifecycle hooks append here)
 
 env:
-  MIN_SLEEP        seconds after a productive tick (default 60)
+  MIN_SLEEP        seconds after a productive tick (default 300)
   IDLE_STEP        added per idle tick              (default 60)
   MAX_SLEEP        ceiling on backoff               (default 3600)
   TIMEOUT_SECS     hard cap on a single turn        (default 600)
+  CLEAR_MIN_GAP    min seconds between /clear calls (default 600)
   CHROME=1         launch claude --chrome (headed browser)
 """
 from __future__ import annotations
@@ -53,11 +54,12 @@ if not AGENT_DIR.is_dir():
     sys.exit(2)
 os.chdir(AGENT_DIR)
 
-MIN_SLEEP    = int(os.environ.get("MIN_SLEEP", "60"))
-IDLE_STEP    = int(os.environ.get("IDLE_STEP", "60"))
-MAX_SLEEP    = int(os.environ.get("MAX_SLEEP", "3600"))
-TIMEOUT_SECS = int(os.environ.get("TIMEOUT_SECS", "600"))
-CHROME       = os.environ.get("CHROME", "") == "1"
+MIN_SLEEP        = int(os.environ.get("MIN_SLEEP", "300"))
+IDLE_STEP        = int(os.environ.get("IDLE_STEP", "60"))
+MAX_SLEEP        = int(os.environ.get("MAX_SLEEP", "3600"))
+TIMEOUT_SECS     = int(os.environ.get("TIMEOUT_SECS", "600"))
+CLEAR_MIN_GAP    = int(os.environ.get("CLEAR_MIN_GAP", "600"))
+CHROME           = os.environ.get("CHROME", "") == "1"
 
 ORCH_DIR    = AGENT_DIR / ".orchestrator"
 ORCH_DIR.mkdir(exist_ok=True)
@@ -325,10 +327,11 @@ FULL_TICK_PROMPT = (
     "stale bullet, or delete what is no longer true. If the file exceeds 2 KB, trim "
     "it before adding anything new.\n"
     "2. Check ./.orchestrator/tools.json. If missing or its `generated_at` is >60min "
-    "old, overwrite with a JSON snapshot of every mcp__* tool you can see, grouped by "
-    "server. Shape: "
+    "old, overwrite with a names-only snapshot of every mcp__* tool you can see, "
+    "grouped by server. Shape: "
     '{"generated_at":"<ISO>","total_tools":<int>,"servers":[{"name":"<server>","tools":[{"name":"<full_tool_name>"}]}]}. '
-    "Be exhaustive.\n"
+    "Names only — do not include parameter schemas, descriptions, examples, or "
+    "any other metadata. One line per tool.\n"
     "\n"
     "Then run your polling loop per CLAUDE.md.\n"
     "\n"
@@ -434,7 +437,8 @@ def main() -> None:
             pass
 
     log(f"agent-loop start pid={os.getpid()} cwd={AGENT_DIR} "
-        f"min={MIN_SLEEP}s step={IDLE_STEP}s max={MAX_SLEEP}s timeout={TIMEOUT_SECS}s")
+        f"min={MIN_SLEEP}s step={IDLE_STEP}s max={MAX_SLEEP}s "
+        f"timeout={TIMEOUT_SECS}s clear-gap={CLEAR_MIN_GAP}s")
 
     claude = ClaudeSession()
     claude.spawn()
@@ -442,6 +446,7 @@ def main() -> None:
     current_sleep = MIN_SLEEP
     fresh_context = True  # next tick needs the FULL setup prompt
     consecutive_failures = 0
+    last_clear_monotonic = 0.0  # rate-limit /clear so we don't re-setup every tick
 
     while not stop_event.is_set():
         # Respawn if claude died between ticks.
@@ -456,17 +461,28 @@ def main() -> None:
             time.sleep(2)
             continue
 
-        # Honor clear-session flag before starting a tick.
+        # Honor clear-session flag before starting a tick. Rate-limited:
+        # the agent's CLAUDE.md tells it to touch clear-session after most
+        # "finished" ticks, which on a busy project means nearly every tick.
+        # Clearing that often forces a fresh FULL_TICK_PROMPT re-setup and
+        # throws away the prompt cache, burning tokens for no real benefit.
+        # We honor the flag at most once every CLEAR_MIN_GAP seconds.
         if CLEAR_FLAG.exists():
-            log("clear-session flag → sending /clear (wipe conversation history)")
             try:
                 CLEAR_FLAG.unlink()
             except FileNotFoundError:
                 pass
-            if claude.send("/clear"):
-                # /clear is near-instant; give it a short window to flush.
-                claude.wait_for_result(timeout=30)
-            fresh_context = True
+            since = time.monotonic() - last_clear_monotonic
+            if last_clear_monotonic == 0.0 or since >= CLEAR_MIN_GAP:
+                log("clear-session flag → sending /clear (wipe conversation history)")
+                if claude.send("/clear"):
+                    # /clear is near-instant; give it a short window to flush.
+                    claude.wait_for_result(timeout=30)
+                fresh_context = True
+                last_clear_monotonic = time.monotonic()
+            else:
+                wait_left = int(CLEAR_MIN_GAP - since)
+                log(f"clear-session flag ignored (rate-limited, {wait_left}s left)")
 
         # Hard-reset flag: full respawn (for when /clear isn't enough).
         if RESET_FLAG.exists():

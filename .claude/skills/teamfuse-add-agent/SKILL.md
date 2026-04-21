@@ -93,10 +93,17 @@ cp -R agents/TEMPLATE agents/<id>
 
 (Via the file tools. Do not actually exec `cp`.)
 
-* Rename `.mcp.json.example` to `.mcp.json` in the new directory.
+* Read `.mcp.json.example`, substitute `${AGENTDM_TOKEN}` with the real
+  `api_key` captured from `admin_create_agent`, write the result to
+  `.mcp.json` (live, gitignored). Leave any other `${...}` placeholders
+  alone — they're resolved later from `.env`. Verify the written file
+  has zero occurrences of `${AGENTDM_TOKEN}`; if one remains, stop and
+  report the path. Keep the `.mcp.json.example` in place as a reference.
 * Rename `.env.example` to `.env`.
-* Write `AGENTDM_TOKEN=<key>` into the new `.env`. Add any optional
-  env vars the operator named (empty values).
+* Write `AGENTDM_TOKEN=<key>` into the new `.env` too (the wrapper
+  sources `.env` before spawning `claude`, so other runtime code can
+  still read the token). Add any optional env vars the operator named
+  (empty values).
 * In the new `CLAUDE.md` and `MEMORY.md`, replace `<agent-alias>` with
   the alias (without the `@`), `<agent-id>` with the id, and
   `<role-title>` with the role.

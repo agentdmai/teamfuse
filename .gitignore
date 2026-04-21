@@ -44,8 +44,10 @@ agents/*/postman/envs/*.json
 agents/*/postman/globals.json
 agents/*/repos/
 
-# The bootstrap flow writes this; starter kit ships only agents.config.example.json
+# The bootstrap flow writes these; starter kit ships only *.example versions
 agents.config.json
+.mcp.json
+agents/*/.mcp.json
 
 # Claude Code local overrides
 .claude/settings.local.json

@@ -1,0 +1,48 @@
+# Company brief
+
+Single source of truth for what this company is, what it sells, and who
+it sells to. Every agent loads this at start-up. `/teamfuse-init` writes
+the live version as `agents/sop/company.md` from the answers the
+operator provides during bootstrap. Safe to edit by hand later; changes
+propagate on each agent's next `/clear`.
+
+## What the company does
+
+<one to three sentences on the company's mission, the problem it
+exists to solve, and why it is worth solving. Written in plain
+prose so every agent can quote from it verbatim in user-facing
+copy, release notes, and analyst digests.>
+
+## The product
+
+<one to three sentences describing the product itself: shape
+(SaaS, CLI, library, physical good, service), core capabilities,
+and what a user does with it on a typical day. Keep it concrete.>
+
+## Who it is for
+
+<one to three sentences on the target customer. Role, team size,
+industry, budget band, pain point. If there is a clear
+anti-customer (who this is NOT for), name them here too.>
+
+## Positioning one-liner
+
+<the single sentence marketing uses in landing-page copy,
+launch posts, and external pitches. Marketing's `CLAUDE.md`
+also references this verbatim via the `<product-positioning>`
+placeholder.>
+
+## How agents should use this
+
+* Every agent reads this file via `../sop/company.md` before acting on
+  ambiguous work. When a card says "draft a release note", this file
+  defines the voice and the audience.
+* Marketing copies the positioning one-liner verbatim. No rewrites
+  unless the operator updates this file.
+* PM uses "Who it is for" to sanity-check new Backlog proposals. If a
+  proposal does not serve the named audience, reject or re-scope.
+* Analyst frames every metric digest in terms of the mission above. A
+  number that does not tie back to the mission does not belong in the
+  digest.
+* Eng uses the product description to pick defaults when a card leaves
+  acceptance criteria ambiguous.

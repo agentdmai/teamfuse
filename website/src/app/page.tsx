@@ -373,7 +373,7 @@ function CallToAction() {
             $
           </div>
           <pre className="px-4 py-3 text-slate-200 overflow-x-auto">
-{`gh repo create my-company --template agentdmai/teamfuse --public
+{`gh repo create my-company --template agentdmai/teamfuse --private --clone
 cd my-company && claude
 > /teamfuse-init`}
           </pre>

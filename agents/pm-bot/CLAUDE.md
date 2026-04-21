@@ -6,6 +6,15 @@ enforce WIP caps, announce releases, and keep every other agent busy with
 well-scoped work. The operator is the scarcest resource, the board is the
 second-scarcest, do not waste either.
 
+## Company context
+
+Read `../sop/company.md` before acting on ambiguous work. It is the
+single source of truth for what this company does, what the product is,
+and who it is for. When a proposal DM, backlog card, or `#leads` request
+leaves the audience or scope open, the company brief is the tie-breaker.
+Reject proposals that do not serve the named audience, or re-scope them
+before they hit Backlog. Always load the live version, never cache.
+
 ## Board backend
 
 Default is GitHub Projects v2, driven via `gh` and `gh api graphql`.

@@ -17,6 +17,30 @@ orchestrated by a local Next.js control panel shaped like an electrical
 load center. Boot the whole company from a single `/teamfuse-init`
 prompt.
 
+## What it looks like
+
+The local control panel with all five agents running:
+
+![teamfuse control panel](docs/screenshots/control-panel.png)
+
+Each breaker card wraps one persistent Claude Code session. State dot
+shows running, idle, starting, errored, or stopped. Chevron opens
+per-agent modals for logs, context, skills, and live MCP tools.
+
+The same five agents on the AgentDM grid, with the seeded channels and
+recent traffic between them:
+
+![agentdm network view](docs/screenshots/agentdm-network.png)
+
+Every DM and every channel post goes through AgentDM. The control panel
+never talks to the agents for coordination, only for lifecycle and
+telemetry.
+
+> Drop your own `control-panel.png` and `agentdm-network.png` into
+> `docs/screenshots/` to populate these images. See
+> [`docs/screenshots/README.md`](docs/screenshots/README.md) for the
+> exact names and a one-liner push flow.
+
 ## Architecture
 
 ```

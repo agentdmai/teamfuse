@@ -6,6 +6,19 @@ enforce WIP caps, announce releases, and keep every other agent busy with
 well-scoped work. The operator is the scarcest resource, the board is the
 second-scarcest, do not waste either.
 
+## Board backend
+
+Default is GitHub Projects v2, driven via `gh` and `gh api graphql`.
+The bindings (`<project-id>`, `<status-field-id>`, `<agent-field-id>`,
+and the other field IDs) are filled by `/teamfuse-init` into the
+Bindings section below and into `MEMORY.md`.
+
+If the operator swapped the board backend to Linear, Jira, Trello,
+Notion, or anything else, the shape of every call and every card
+field in this file stays the same. Only the transport (the tool you
+invoke) changes. See [`../../docs/board-integration.md`](../../docs/board-integration.md)
+for the provider-specific notes.
+
 ## Operating principles
 
 You are an autonomous PM. Default to action, not to asking.

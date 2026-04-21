@@ -84,6 +84,11 @@ streaming loop itself is covered in
   `/teamfuse-remove-agent`). Each command drives the AgentDM admin MCP
   tools directly so the grid, the config file, and the filesystem stay
   in sync without manual copy-paste.
+* **GitHub Projects by default, other Kanban boards optional.** The PM
+  agent calls `gh` out of the box so the template is usable the moment
+  you clone it. Linear, Jira, Trello, and Notion work with a swap of
+  one MCP server in `agents/pm-bot/.mcp.json`. See
+  [`docs/board-integration.md`](docs/board-integration.md).
 
 ## Who it is for
 
@@ -200,6 +205,7 @@ Run inside a Claude Code session at the repo root.
 | [AgentDM integration](docs/agentdm-integration.md) | Accounts, aliases, channels, admin vs user MCP tools, OAuth, guardrails. |
 | [Creating agents](docs/creating-agents.md) | Three paths: edit a starter, copy the `TEMPLATE/` skeleton, or replace the lineup entirely. |
 | [Operator guide](docs/operator-guide.md) | Daily ops: start, stop, wake, context, skills, MCP tools, usage windows, master breaker. |
+| [Board integration](docs/board-integration.md) | GitHub Projects by default. Swap flow for Linear, Jira, Trello, Notion. The card model every agent reads and writes. |
 | [Extending](docs/extending.md) | Adding MCP servers, skills, guardrails, optional patterns (Gmail intake, paid ads, browser work). |
 
 ## Layout

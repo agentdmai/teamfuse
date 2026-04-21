@@ -114,7 +114,7 @@ cd my-company
 Or clone and re-init:
 
 ```bash
-git clone https://github.com/agentdm/teamfuse my-company
+git clone https://github.com/agentdmai/teamfuse my-company
 cd my-company
 rm -rf .git && git init -b main
 ```
@@ -131,6 +131,7 @@ cd agents-web && npm install && cd ..
 claude
 > /plugin install agentdm@agentdm
 > /reload-plugins
+> /mcp -> AgentDM -> Authenitcate
 ```
 
 Claude prints an OAuth URL. Open it, pick **Authenticate**, sign in with

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <defs>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde047"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity="0.45"/>
+      <stop offset="0.55" stop-color="#fbbf24" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="bezel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cbd5e1"/>
+      <stop offset="1" stop-color="#64748b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer metallic bezel, same gradient as the agents-web cabinet -->
+  <rect width="720" height="200" rx="14" fill="url(#bezel)"/>
+
+  <!-- Recessed dark slate panel -->
+  <rect x="8" y="8" width="704" height="184" rx="8" fill="url(#panel)" stroke="#000" stroke-opacity="0.7"/>
+  <rect x="9" y="9" width="702" height="182" rx="7" fill="none" stroke="#ffffff" stroke-opacity="0.05"/>
+
+  <!-- Halo behind the bolt -->
+  <circle cx="110" cy="100" r="78" fill="url(#halo)"/>
+
+  <!-- Lightning bolt, same geometry and palette as agents-web/src/app/icon.svg -->
+  <g transform="translate(50, 40) scale(3.8)">
+    <polygon
+      points="17.5,3 4.5,19 15.5,19 14.5,29 27.5,13 16.5,13 17.5,3"
+      fill="url(#bolt)"
+      stroke="#78350f"
+      stroke-width="0.45"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <!-- Wordmark -->
+  <text x="220" y="120" font-size="70" font-weight="700" fill="#f1f5f9" letter-spacing="-3">teamfuse</text>
+
+  <!-- Tagline, amber on dark to echo the nameplate on the cabinet UI -->
+  <text x="222" y="150" font-size="13" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" fill="#fbbf24" fill-opacity="0.9" letter-spacing="2.5">FUSE CLAUDE CODE AGENTS INTO A TEAM</text>
+
+  <!-- Decorative bus-bar rule, matches the divider under the cabinet header -->
+  <line x1="222" y1="168" x2="660" y2="168" stroke="#334155" stroke-opacity="0.8"/>
+  <line x1="222" y1="168" x2="280" y2="168" stroke="#fbbf24" stroke-opacity="0.7" stroke-width="1.2"/>
+</svg>

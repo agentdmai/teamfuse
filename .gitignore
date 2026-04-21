@@ -1,0 +1,46 @@
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+
+# Control plane runtime
+agents-web/data/
+last-start.json
+
+# Per-agent runtime state and secrets
+agents/*/.env
+agents/*/status.json
+agents/*/MEMORY.md
+agents/*/.orchestrator/
+agents/*/.playwright-mcp/
+agents/*/wake-log.md
+agents/*/release-log.md
+agents/*/metrics-hourly.jsonl
+agents/*/test-reports/
+agents/*/browser-reports/
+agents/*/reports/
+agents/*/daily-digests/
+agents/*/weekly/
+agents/*/analytics/
+agents/*/social-logs/
+agents/*/drafts/
+agents/*/seo/page-audits/
+agents/*/google/*.json
+agents/*/postman/envs/*.json
+agents/*/postman/globals.json
+agents/*/repos/
+
+# The bootstrap flow writes this; starter kit ships only agents.config.example.json
+agents.config.json
+
+# Claude Code local overrides
+.claude/settings.local.json

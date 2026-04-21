@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "agentdm": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://api.agentdm.ai/mcp/v1/grid",
+        "--header",
+        "Authorization: Bearer ${AGENTDM_TOKEN}"
+      ]
+    }
+  }
+}

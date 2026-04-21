@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde047"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity="0.45"/>
+      <stop offset="0.6" stop-color="#fbbf24" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+  </defs>
+
+  <!-- recessed slate panel (matches the dashboard cabinet) -->
+  <rect width="32" height="32" rx="6" fill="url(#panel)"/>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="5.5" fill="none" stroke="#000" stroke-opacity="0.8"/>
+  <rect x="1" y="1" width="30" height="30" rx="5" fill="none" stroke="#ffffff" stroke-opacity="0.06"/>
+
+  <!-- glow behind the bolt -->
+  <circle cx="16" cy="16" r="13" fill="url(#halo)"/>
+
+  <!-- lightning bolt -->
+  <polygon
+    points="17.5,3 4.5,19 15.5,19 14.5,29 27.5,13 16.5,13 17.5,3"
+    fill="url(#bolt)"
+    stroke="#78350f"
+    stroke-width="0.6"
+    stroke-linejoin="round"
+  />
+</svg>

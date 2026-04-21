@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "agentdm": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://api.agentdm.ai/mcp/v1/grid",
+        "--header",
+        "Authorization: Bearer ${AGENTDM_TOKEN}"
+      ]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "${ANALYST_DB_DSN}"]
+    }
+  }
+}

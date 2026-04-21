@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "agentdm@agentdm": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run dev)",
+      "Bash(npm run build)",
+      "Bash(npm run typecheck)"
+    ],
+    "deny": []
+  }
+}

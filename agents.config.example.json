@@ -1,0 +1,11 @@
+{
+  "companyName": "Your Company",
+  "agentsRoot": "./agents",
+  "agents": [
+    { "id": "pm-bot",    "alias": "@pm-bot",    "role": "Product Manager",  "chrome": false },
+    { "id": "eng-bot",   "alias": "@eng-bot",   "role": "Engineer",         "chrome": false },
+    { "id": "qa-bot",    "alias": "@qa-bot",    "role": "QA Engineer",      "chrome": false },
+    { "id": "marketing", "alias": "@marketing", "role": "Marketing Lead",   "chrome": true  },
+    { "id": "analyst",   "alias": "@analyst",   "role": "Analyst",          "chrome": false }
+  ]
+}

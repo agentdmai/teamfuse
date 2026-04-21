@@ -12,6 +12,11 @@ dist/
 # OS
 .DS_Store
 
+# IDE
+.idea/
+.vscode/
+*.iml
+
 # Control plane runtime
 agents-web/data/
 last-start.json

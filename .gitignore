@@ -44,3 +44,7 @@ agents.config.json
 
 # Claude Code local overrides
 .claude/settings.local.json
+.claude/.teamfuse-greeted
+
+# Archived agents from /teamfuse-remove-agent
+agents/.archive/

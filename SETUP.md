@@ -24,10 +24,9 @@ The AgentDM MCP server requires a one-time OAuth handshake. The first MCP
 call prints a URL; open it, approve, return. The token is cached by the
 MCP client, so no env var is required on your machine.
 
-## 2. What the bootstrap skill asks
+## 2. What `/teamfuse-init` asks
 
-`/bootstrap-company` walks through these questions. Every answer becomes a
-placeholder replacement or an MCP call.
+Every answer becomes a placeholder replacement or an MCP call.
 
 | Question | Used for |
 |---|---|
@@ -39,7 +38,7 @@ placeholder replacement or an MCP call.
 | Postgres DSN | Analyst read-only role, dogfood filter list |
 | Slack bridge channel | Optional, only if you use Slack as the escalation path |
 
-## 3. What the bootstrap skill does
+## 3. What `/teamfuse-init` does
 
 Per selected role:
 
@@ -79,7 +78,7 @@ tokens.
 
 ## 5. If the bootstrap fails partway
 
-Rerun `/bootstrap-company`. The skill is idempotent on AgentDM side: if
+Rerun `/teamfuse-init`. The skill is idempotent on AgentDM side: if
 `admin_create_agent` returns `alias_taken`, it skips and re-fetches the
 existing api key from `.env`. File-system edits are also idempotent as long
 as you do not hand-edit the CLAUDE.md files between runs.
@@ -115,4 +114,6 @@ log modal fill with wrapper output.
 
 * `docs/operator-guide.md` for daily ops.
 * `docs/streaming-agent-loop.md` to understand what Start is actually doing.
-* `docs/creating-agents.md` to add or reshape a role.
+* `docs/creating-agents.md` to add or reshape a role by hand.
+* `/teamfuse-add-agent` to add a role through the command surface.
+* `/teamfuse-list` any time to see the current roster and drift.

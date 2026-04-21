@@ -3,7 +3,7 @@
 **Fuse five Claude Code agents into a working team.** Product, Engineering,
 QA, Marketing, and Analyst, coordinating over [AgentDM](https://agentdm.ai),
 orchestrated by a local Next.js control panel shaped like an electrical
-load center. Boot the whole company from a single `/bootstrap-company`
+load center. Boot the whole company from a single `/teamfuse-init`
 prompt.
 
 ```
@@ -27,10 +27,11 @@ prompt.
 * **A shared SOP library** (`agents/sop/`): card lifecycle, WIP caps,
   wake protocol, PR review, commit attribution, release validation,
   browser requests, DB access.
-* **A bootstrap skill** that you run inside Claude Code. It asks for the
-  handful of specifics it needs, provisions the AgentDM grid via admin
-  MCP tools, writes `agents.config.json`, and fills every `<placeholder>`
-  in each role's `CLAUDE.md` with your real values.
+* **A command surface** (`/teamfuse`, `/teamfuse-init`,
+  `/teamfuse-add-agent`, `/teamfuse-add-channel`, `/teamfuse-list`,
+  `/teamfuse-remove-agent`). Each command drives the AgentDM admin MCP
+  tools directly so the grid, the config file, and the filesystem stay
+  in sync without manual copy-paste.
 
 ## Who it is for
 
@@ -74,17 +75,26 @@ claude
 Claude prints an OAuth URL. Open it, approve, come back. See
 `docs/agentdm-integration.md` for the account, alias, and channel model.
 
-### 4. Fuse the team
+### 4. Say hi
 
 Inside the same Claude session, at the repo root:
 
 ```
-> /bootstrap-company
+> /teamfuse
 ```
 
-The skill asks for your company name, operator alias, which of the five
-roles to provision, and any role-specific bindings (GitHub org, Postgres
-DSN). It then:
+Prints the banner and the command list. Do this once so you know what
+else is available.
+
+### 5. Fuse the team
+
+```
+> /teamfuse-init
+```
+
+Asks for your company name, operator alias, which of the five roles to
+provision, and any role-specific bindings (GitHub org, Postgres DSN).
+It then:
 
 * creates one AgentDM agent per role, stores each api key into
   `agents/<id>/.env`
@@ -95,7 +105,7 @@ DSN). It then:
 
 Idempotent. Safe to rerun.
 
-### 5. Light the panel
+### 6. Light the panel
 
 ```bash
 cd agents-web
@@ -115,6 +125,19 @@ and the log modal fills with tick output.
 * An [AgentDM](https://app.agentdm.ai) account
 * A GitHub account (only if Eng, PM, or QA are provisioned)
 * A Postgres DSN (only if Analyst is provisioned)
+
+## Commands
+
+Run inside a Claude Code session at the repo root.
+
+| Command | What it does |
+|---|---|
+| `/teamfuse` | Show the banner and the command list. Run first in a fresh checkout. |
+| `/teamfuse-init` | Bootstrap the company. AgentDM agents, channels, `agents.config.json`, placeholder fills. Idempotent. |
+| `/teamfuse-add-agent` | Add a new role. Copies `agents/TEMPLATE/` to `agents/<id>/`, calls `admin_create_agent`, wires channels, updates `agents.config.json`. |
+| `/teamfuse-add-channel` | Create a channel on AgentDM and seed members. |
+| `/teamfuse-list` | Show the current roster. Cross-checks `agents.config.json` against AgentDM and flags drift. Read-only. |
+| `/teamfuse-remove-agent` | Soft-delete an agent on AgentDM, remove the config entry, optionally archive `agents/<id>/`. |
 
 ## Docs
 
@@ -137,7 +160,13 @@ and the log modal fills with tick output.
 ├── .gitignore
 ├── .claude/
 │   ├── settings.example.json
-│   └── skills/bootstrap-company/       the bootstrap flow
+│   └── skills/                         six teamfuse-* commands
+│       ├── teamfuse/
+│       ├── teamfuse-init/
+│       ├── teamfuse-add-agent/
+│       ├── teamfuse-add-channel/
+│       ├── teamfuse-list/
+│       └── teamfuse-remove-agent/
 ├── .mcp.json.example                   AgentDM MCP, copy to .mcp.json
 ├── agents.config.example.json          copy to agents.config.json during bootstrap
 ├── docs/                               six markdown docs

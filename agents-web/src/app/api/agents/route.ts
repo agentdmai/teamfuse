@@ -16,6 +16,7 @@ export async function GET() {
       id: a.id,
       alias: a.alias,
       role: a.role,
+      runtime: a.runtime,
       workingDir: a.workingDir,
       chrome: a.chrome,
       status: s?.status ?? null,

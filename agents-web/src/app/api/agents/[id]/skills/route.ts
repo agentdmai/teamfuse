@@ -6,15 +6,26 @@ import { getAgent, isAgentId } from "@/lib/agents";
 
 export const dynamic = "force-dynamic";
 
-// Scans <agent.workingDir>/.claude/skills/*/SKILL.md (project-scoped skills)
-// and ~/.claude/skills/*/SKILL.md (user-scoped, global). Each skill is a
-// directory with a SKILL.md whose YAML frontmatter has `name` and
-// `description`. We surface both for the dashboard's skills modal.
+// Scans project-scoped skill directories and ~/.claude/skills (user-scoped).
+//
+// For claude agents, the only project skill dir is:
+//   <workingDir>/.claude/skills/
+//
+// For copilot agents, all three locations are loaded automatically by the CLI:
+//   <workingDir>/.claude/skills/   ← shared with claude; preferred
+//   <workingDir>/.github/skills/
+//   <workingDir>/.agents/skills/
+//
+// User-scoped skills (~/.claude/skills/) are available for claude; for copilot
+// the equivalent personal skills dirs are ~/.claude/skills/, ~/.github/skills/,
+// and ~/.agents/skills/, but we only surface ~/.claude/skills/ here (same data).
 
 interface SkillRef {
   name: string;
   description: string;
   scope: "project" | "user";
+  /** Relative sub-path within workingDir, e.g. ".claude/skills" */
+  skillsDir: string;
   path: string;
 }
 
@@ -51,6 +62,7 @@ function parseFrontmatter(text: string): { name: string; description: string } {
 async function scanSkillDir(
   dir: string,
   scope: "project" | "user",
+  skillsDir: string,
 ): Promise<SkillRef[]> {
   let entries: string[];
   try {
@@ -71,6 +83,7 @@ async function scanSkillDir(
         name: fm.name || name,
         description: fm.description || "",
         scope,
+        skillsDir,
         path: full,
       });
     } catch {
@@ -93,16 +106,42 @@ export async function GET(
     );
   }
   const agent = getAgent(id)!;
+  const isCopilot = agent.runtime === "copilot";
 
-  const [projectSkills, userSkills] = await Promise.all([
-    scanSkillDir(path.join(agent.workingDir, ".claude", "skills"), "project"),
-    scanSkillDir(path.join(os.homedir(), ".claude", "skills"), "user"),
-  ]);
+  // Project skill directories to scan.
+  const projectDirs = [".claude/skills"];
+  if (isCopilot) {
+    projectDirs.push(".github/skills", ".agents/skills");
+  }
+
+  const projectSkillGroups = await Promise.all(
+    projectDirs.map((rel) =>
+      scanSkillDir(path.join(agent.workingDir, rel), "project", rel),
+    ),
+  );
+  // Flatten, deduplicate by name (first occurrence wins if same skill appears in multiple dirs).
+  const seen = new Set<string>();
+  const projectSkills: SkillRef[] = [];
+  for (const group of projectSkillGroups) {
+    for (const s of group) {
+      if (!seen.has(s.name)) {
+        seen.add(s.name);
+        projectSkills.push(s);
+      }
+    }
+  }
+
+  const userSkills = await scanSkillDir(
+    path.join(os.homedir(), ".claude", "skills"),
+    "user",
+    "~/.claude/skills",
+  );
 
   return NextResponse.json({
     ok: true,
     agent: id,
-    projectSkillsPath: path.join(agent.workingDir, ".claude", "skills"),
+    runtime: agent.runtime,
+    projectSkillDirs: projectDirs.map((rel) => path.join(agent.workingDir, rel)),
     userSkillsPath: path.join(os.homedir(), ".claude", "skills"),
     projectSkills,
     userSkills,

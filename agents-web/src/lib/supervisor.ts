@@ -123,9 +123,17 @@ export function startAgent(id: AgentId): StartResult {
   if (!fs.existsSync(agent.workingDir)) {
     throw new Error(`workingDir does not exist: ${agent.workingDir}`);
   }
-  const claudeMd = path.join(agent.workingDir, "CLAUDE.md");
-  if (!fs.existsSync(claudeMd)) {
-    throw new Error(`missing CLAUDE.md in ${agent.workingDir}`);
+  // Each runtime has a canonical instructions file.
+  // Claude agents require CLAUDE.md (auto-loaded natively by Claude Code).
+  // Copilot agents use AGENTS.md (auto-loaded natively by the Copilot CLI).
+  const instructionsFile = agent.instructionsFile
+    ?? (agent.runtime === "copilot" ? "AGENTS.md" : "CLAUDE.md");
+  const primaryInstructions = path.join(agent.workingDir, instructionsFile);
+  const fallbackInstructions = path.join(agent.workingDir, "CLAUDE.md");
+  if (!fs.existsSync(primaryInstructions) && !fs.existsSync(fallbackInstructions)) {
+    throw new Error(
+      `missing instructions file (${instructionsFile}) in ${agent.workingDir}`,
+    );
   }
   if (!fs.existsSync(LOOP_SCRIPT)) {
     throw new Error(`loop script missing: ${LOOP_SCRIPT}`);
@@ -147,7 +155,8 @@ export function startAgent(id: AgentId): StartResult {
     stdio: ["ignore", out, out],
     env: {
       ...process.env,
-      ...(agent.chrome ? { CHROME: "1" } : {}),
+      RUNTIME: agent.runtime,
+      ...(agent.chrome && agent.runtime === "claude" ? { CHROME: "1" } : {}),
     },
   });
   child.unref();

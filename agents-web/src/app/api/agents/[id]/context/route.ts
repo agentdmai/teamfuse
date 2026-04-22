@@ -45,11 +45,11 @@ function sopDir(): string {
   );
 }
 
-// The wrapper script lives next to the web app at
-// <repo>/agents-web/scripts/agent-loop.sh. process.cwd() is the Next.js
+// The wrapper script's Python file lives at:
+// <repo>/agents-web/scripts/agent-loop.py. process.cwd() is the Next.js
 // server's working dir which in dev runs from agents-web/.
 function wrapperPath(): string {
-  return path.resolve(process.cwd(), "scripts", "agent-loop.sh");
+  return path.resolve(process.cwd(), "scripts", "agent-loop.py");
 }
 
 async function safeStat(
@@ -63,13 +63,13 @@ async function safeStat(
   }
 }
 
-// Parse CLAUDE.md for `../sop/<foo>.md` style references so we can surface
-// the SOPs this agent might reach for. Best-effort regex; falls back to an
-// empty list on read failure.
-async function referencedSopFiles(claudeMdPath: string): Promise<string[]> {
+// Parse an instructions file for `../sop/<foo>.md` style references so we
+// can surface the SOPs this agent might reach for. Best-effort regex; falls
+// back to an empty list on read failure.
+async function referencedSopFiles(instructionsPath: string): Promise<string[]> {
   let text: string;
   try {
-    text = await fs.readFile(claudeMdPath, "utf8");
+    text = await fs.readFile(instructionsPath, "utf8");
   } catch {
     return [];
   }
@@ -83,36 +83,44 @@ async function referencedSopFiles(claudeMdPath: string): Promise<string[]> {
 async function buildEntries(agent: AgentDefinition): Promise<ContextEntry[]> {
   const cwd = agent.workingDir;
   const entries: ContextEntry[] = [];
+  const isCopilot = agent.runtime === "copilot";
 
-  // 1. Auto-loaded CLAUDE.md from cwd
-  const claudeCwd = path.join(cwd, "CLAUDE.md");
-  const claudeCwdStat = await safeStat(claudeCwd);
+  // 1. Primary instructions file — auto-loaded by the CLI from cwd.
+  //    Claude Code loads CLAUDE.md; the Copilot CLI loads AGENTS.md.
+  const instrFile = agent.instructionsFile
+    ?? (isCopilot ? "AGENTS.md" : "CLAUDE.md");
+  const instrPath = path.join(cwd, instrFile);
+  const instrStat = await safeStat(instrPath);
   entries.push({
-    id: "claude-md-cwd",
-    label: "CLAUDE.md",
+    id: "instructions-md",
+    label: instrFile,
     category: "Auto-loaded",
     loadMode: "auto-cwd",
-    absPath: claudeCwd,
-    size: claudeCwdStat.size,
-    exists: claudeCwdStat.exists,
-    description: "Agent's primary instructions (auto-loaded by Claude Code from cwd)",
+    absPath: instrPath,
+    size: instrStat.size,
+    exists: instrStat.exists,
+    description: isCopilot
+      ? "Agent's primary instructions (auto-loaded by the Copilot CLI from cwd)"
+      : "Agent's primary instructions (auto-loaded by Claude Code from cwd)",
   });
 
-  // 1a. User-global CLAUDE.md at ~/.claude/CLAUDE.md — if present, it's
-  // ALWAYS injected into every Claude Code session regardless of cwd.
-  const claudeGlobal = path.join(os.homedir(), ".claude", "CLAUDE.md");
-  const claudeGlobalStat = await safeStat(claudeGlobal);
-  if (claudeGlobalStat.exists) {
-    entries.push({
-      id: "claude-md-global",
-      label: "~/.claude/CLAUDE.md",
-      category: "Auto-loaded",
-      loadMode: "auto-cwd",
-      absPath: claudeGlobal,
-      size: claudeGlobalStat.size,
-      exists: true,
-      description: "User-global Claude Code instructions (applied to every session)",
-    });
+  // 1a. User-global CLAUDE.md at ~/.claude/CLAUDE.md — only relevant for
+  // claude agents; always injected into every Claude Code session.
+  if (!isCopilot) {
+    const claudeGlobal = path.join(os.homedir(), ".claude", "CLAUDE.md");
+    const claudeGlobalStat = await safeStat(claudeGlobal);
+    if (claudeGlobalStat.exists) {
+      entries.push({
+        id: "claude-md-global",
+        label: "~/.claude/CLAUDE.md",
+        category: "Auto-loaded",
+        loadMode: "auto-cwd",
+        absPath: claudeGlobal,
+        size: claudeGlobalStat.size,
+        exists: true,
+        description: "User-global Claude Code instructions (applied to every session)",
+      });
+    }
   }
 
   // 2. MEMORY.md — read at tick start per the wrapper's TICK_PROMPT
@@ -129,7 +137,9 @@ async function buildEntries(agent: AgentDefinition): Promise<ContextEntry[]> {
     description: "Bounded durable-facts scratchpad, read every tick (budget 2 KB)",
   });
 
-  // 3. Synthetic: the tick prompt text the wrapper injects on every claude -p
+  // 3. Synthetic: the tick prompt text the wrapper injects on every tick.
+  //    FULL_TICK_PROMPT is used on fresh sessions (always for copilot, first tick for claude).
+  //    LIGHT_TICK_PROMPT is used when a claude session is warm (continuation tick).
   entries.push({
     id: "tick-prompt",
     label: "tick prompt (wrapper)",
@@ -138,7 +148,9 @@ async function buildEntries(agent: AgentDefinition): Promise<ContextEntry[]> {
     absPath: wrapperPath(),
     size: 0, // extracted dynamically in content endpoint
     exists: true,
-    description: "TICK_PROMPT default from agent-loop.sh — injected on every tick",
+    description: isCopilot
+      ? "FULL_TICK_PROMPT from agent-loop.py — injected on every tick (copilot always gets full)"
+      : "FULL_TICK_PROMPT + LIGHT_TICK_PROMPT from agent-loop.py — full on fresh session, light on warm continuation",
   });
 
   // 4. MCP config — configures servers whose TOOL SCHEMAS become part of context
@@ -198,9 +210,9 @@ async function buildEntries(agent: AgentDefinition): Promise<ContextEntry[]> {
     // no skills dir — ignore
   }
 
-  // 6. SOP files referenced from CLAUDE.md. These are lazy-reads; surface
-  // them so the user understands what the agent MIGHT pull in.
-  const sops = await referencedSopFiles(claudeCwd);
+  // 6. SOP files referenced from the instructions file. These are lazy-reads;
+  // surface them so the user understands what the agent MIGHT pull in.
+  const sops = await referencedSopFiles(instrPath);
   for (const name of sops) {
     const abs = path.join(sopDir(), name);
     const st = await safeStat(abs);
@@ -218,23 +230,52 @@ async function buildEntries(agent: AgentDefinition): Promise<ContextEntry[]> {
   return entries;
 }
 
-// Read the default TICK_PROMPT out of agent-loop.sh. The shell default is
-// defined as `TICK_PROMPT="${TICK_PROMPT:-...}"`; we extract the body between
-// the `:-` and the matching closing quote.
+// Extract a Python string constant (parenthesised, concatenated string literals)
+// from agent-loop.py. Handles the form:
+//   NAME = (
+//       "line 1 "
+//       "line 2\n"
+//       ...
+//   )
+function extractPyStringConst(text: string, name: string): string | null {
+  const startMarker = `${name} = (`;
+  const start = text.indexOf(startMarker);
+  if (start < 0) return null;
+  const bodyStart = start + startMarker.length;
+  // Find the matching closing paren — simplistic but sufficient for flat strings.
+  const end = text.indexOf("\n)\n", bodyStart);
+  if (end < 0) return null;
+  const body = text.slice(bodyStart, end);
+  // Each physical line is a quoted string segment. Strip leading whitespace,
+  // surrounding quotes, and unescape \n sequences.
+  const parts: string[] = [];
+  for (const raw of body.split("\n")) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    // Match a double-quoted segment (single quotes not used in these constants).
+    const m = trimmed.match(/^"(.*)"$/);
+    if (!m) continue;
+    parts.push(m[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"'));
+  }
+  return parts.join("") || null;
+}
+
+// Read FULL_TICK_PROMPT and LIGHT_TICK_PROMPT from agent-loop.py and return
+// them labelled so the CTX modal can display both.
 async function readTickPrompt(): Promise<string> {
   let text: string;
   try {
     text = await fs.readFile(wrapperPath(), "utf8");
   } catch (err) {
-    return `(failed to read wrapper: ${(err as Error).message})`;
+    return `(failed to read agent-loop.py: ${(err as Error).message})`;
   }
-  const start = text.indexOf('TICK_PROMPT="${TICK_PROMPT:-');
-  if (start < 0) return "(TICK_PROMPT default not found in wrapper)";
-  const bodyStart = start + 'TICK_PROMPT="${TICK_PROMPT:-'.length;
-  // Find the first unescaped closing `}"` — that's the end of the default.
-  const end = text.indexOf('}"', bodyStart);
-  if (end < 0) return "(TICK_PROMPT terminator not found)";
-  return text.slice(bodyStart, end);
+  const full = extractPyStringConst(text, "FULL_TICK_PROMPT");
+  const light = extractPyStringConst(text, "LIGHT_TICK_PROMPT");
+  if (!full && !light) return "(tick prompts not found in agent-loop.py)";
+  const parts: string[] = [];
+  if (full)  parts.push(`=== FULL_TICK_PROMPT (fresh session / copilot every tick) ===\n\n${full}`);
+  if (light) parts.push(`=== LIGHT_TICK_PROMPT (claude warm session continuation) ===\n\n${light}`);
+  return parts.join("\n\n");
 }
 
 export async function GET(

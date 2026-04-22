@@ -88,10 +88,10 @@ export function AgentContextModal({ agentId, agentAlias, onClose }: Props) {
         setEntries(null);
       } else {
         setEntries(data.entries);
-        // Auto-select CLAUDE.md on first load so the viewer isn't empty.
+        // Auto-select the primary instructions file on first load.
         if (selectedId == null && data.entries.length > 0) {
           const first =
-            data.entries.find((e) => e.id === "claude-md-cwd") ?? data.entries[0];
+            data.entries.find((e) => e.id === "instructions-md") ?? data.entries[0];
           setSelectedId(first.id);
         }
       }

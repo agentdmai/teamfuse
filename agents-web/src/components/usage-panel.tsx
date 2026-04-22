@@ -112,7 +112,7 @@ export function UsagePanel() {
   return (
     <section className="rounded-lg border border-border bg-background text-foreground p-4 space-y-4">
       <header className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
-        <span>Claude usage · from session files</span>
+        <span>Agent usage · from session files</span>
         <span className="inline-flex items-center gap-1.5">
           <RefreshCw
             className={`h-3 w-3 ${loading ? "animate-spin text-emerald-600" : ""}`}

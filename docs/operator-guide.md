@@ -42,16 +42,21 @@ The Log modal is the first place to look when an agent looks stuck.
 
 ## Context modal
 
-Shows the agent's `CLAUDE.md` plus the current `MEMORY.md`. Useful for
+Shows the agent's instructions file (`CLAUDE.md` for claude agents,
+`AGENTS.md` for copilot agents) plus the current `MEMORY.md`. Useful for
 verifying the bootstrap skill wrote the right placeholders. Also useful
 for catching MEMORY.md files that have drifted past 2KB; the agent is
 supposed to consolidate on every tick, but sometimes it forgets.
 
 ## Skills modal
 
-Enumerates the skills in `.claude/skills/`. Each row is one skill
-directory with a `SKILL.md`. The session settings write an allowlist so
-only these skills can fire; any system skill is blocked.
+Enumerates the skills in `.claude/skills/` in the agent's working directory.
+Each row is one skill directory with a `SKILL.md`.
+
+For **copilot** agents, skills are loaded from any of these directories:
+- `.claude/skills/` (same as Claude — use this to share skills across runtimes)
+- `.github/skills/`
+- `.agents/skills/`
 
 ## MCP tools modal
 
@@ -110,6 +115,29 @@ tail -f ~/.claude/projects/$(pwd | tr / -)/*.jsonl
 
 (You have to be in the agent's working directory for the slug to match.)
 
+## File locations
+
+The control panel reads several files at fixed paths. Here is the full
+map relative to the **repo root** (one level above `agents-web/`):
+
+| File | Purpose |
+|---|---|
+| `agents.config.json` | Agent roster — required. Dashboard is empty without it. Copy from `agents.config.example.json` and run `/teamfuse-init`, or create manually. Override the path with the `AGENTS_CONFIG` env var. |
+| `agents-web/.env.local` | Control panel env vars (`DATABASE_URL`, port, usage caps). Copy from `agents-web/.env.example`. |
+| `agents-web/data/control-plane.db` | SQLite DB (auto-created). Location set by `DATABASE_URL` in `.env.local`. |
+| `agents/<id>/CLAUDE.md` | Role instructions for **claude** agents (auto-loaded by Claude Code CLI). Required to Start a claude agent. |
+| `agents/<id>/AGENTS.md` | Role instructions for **copilot** agents (auto-loaded by the Copilot CLI from cwd). Required to Start a copilot agent. |
+| `agents/<id>/.env` | Per-agent env vars — primarily the AgentDM `AGENTDM_API_KEY`. Written by `/teamfuse-init`. |
+| `agents/<id>/.mcp.json` | Per-agent MCP server config. Passed as `--additional-mcp-config` to the CLI. |
+| `agents/<id>/MEMORY.md` | Agent's bounded scratchpad (≤2 KB). Created empty on first Start if missing. |
+| `agents/<id>/.orchestrator/` | Runtime outputs: `agent-loop.log`, `sleep.json`, `tools.json`. Gitignored, created at Start. |
+| `agents/<id>/status.json` | Written by the agent each tick. Drives the state dot on the breaker card. |
+
+**Key rule:** `agents.config.json` lives at the repo root, **not** inside
+`agents-web/`. The control panel resolves it as `../agents.config.json`
+relative to its own `process.cwd()` (which is `agents-web/` when you run
+`npm run dev`). You can override this with `AGENTS_CONFIG=/absolute/path`.
+
 ## When something looks wrong
 
 * Agent stuck in starting: open the log modal, look for spawn errors,
@@ -120,4 +148,4 @@ tail -f ~/.claude/projects/$(pwd | tr / -)/*.jsonl
   Reset the 5h baseline if you just bought another chunk of quota, or
   wait for the window to roll.
 * `agents.config.json` missing: dashboard shows an empty table. Run
-  `/bootstrap-company` or copy `agents.config.example.json` manually.
+  `/teamfuse-init` or copy `agents.config.example.json` manually.

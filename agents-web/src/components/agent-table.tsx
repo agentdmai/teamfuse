@@ -30,6 +30,7 @@ export async function AgentTable() {
                 id: agent.id,
                 alias: agent.alias,
                 role: agent.role,
+                runtime: agent.runtime,
                 workingDir: agent.workingDir,
                 chrome: agent.chrome,
               }}

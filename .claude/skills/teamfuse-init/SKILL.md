@@ -1,6 +1,6 @@
 ---
 name: teamfuse-init
-description: Bootstrap a new Claude Code agent company from the teamfuse template. Prints the teamfuse banner, asks for company specifics, provisions the AgentDM grid via admin MCP tools, writes agents.config.json, and fills placeholders in per-agent CLAUDE.md files. Idempotent. Run once at the start of a new project. Trigger on /teamfuse-init, /teamfuse init, "bootstrap my teamfuse company", or similar.
+description: Bootstrap a new agent company from the teamfuse template. Supports both Claude Code and GitHub Copilot runtimes. Prints the teamfuse banner, asks for company specifics, provisions the AgentDM grid via admin MCP tools, writes agents.config.json, and fills placeholders in per-agent instruction files. Idempotent. Run once at the start of a new project. Trigger on /teamfuse-init, /teamfuse init, "bootstrap my teamfuse company", or similar.
 trigger_keywords: [teamfuse-init, teamfuse init, bootstrap, provision, set-up-company, /teamfuse-init]
 ---
 
@@ -40,11 +40,11 @@ Print this verbatim before anything else.
     ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║     ╚██████╔╝███████║███████╗
     ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝      ╚═════╝ ╚══════╝╚══════╝
 
-        Fuse Claude Code agents into a working team.  init flow.
+        Fuse agents into a working team.  init flow.
 ```
 
-You (Claude) are standing up a new agent company from the teamfuse
-template. Run inside the operator's Claude session at the repo root.
+You are standing up a new agent company from the teamfuse template.
+Run inside the operator's Claude session at the repo root.
 The AgentDM MCP server must be connected (the `admin_*` tools need to
 be visible). If they are not, stop and print:
 
@@ -73,7 +73,7 @@ This skill is safe to rerun.
 * `admin_create_channel`: on `channel_taken`, skip.
 * `admin_set_agent_skills` and `admin_set_channel_members`: idempotent
   by design (atomic replace).
-* Placeholder substitution in `CLAUDE.md` and `MEMORY.md`: if no
+* Placeholder substitution in instruction files and `MEMORY.md`: if no
   `<token>` remains for a value, it is already filled.
 * `agents/sop/company.md`: overwrite only if the operator's step-1
   answers differ from the live file. Otherwise skip silently.
@@ -116,6 +116,15 @@ Mandatory:
   Default: `@operator`.
 * **Roles to provision.** Subset of `pm-bot, eng-bot, qa-bot,
   marketing, analyst`. Default: all five.
+* **Default runtime.** `claude` (default) or `copilot`. Applies to all
+  roles unless overridden per role.
+  - `claude`: Claude Code CLI, persistent stream-json session,
+    `CLAUDE.md` as instruction file.
+  - `copilot`: GitHub Copilot CLI, stateless per-tick,
+    `AGENTS.md` as instruction file.
+* **Per-role runtime overrides.** Only ask if the operator wants to mix
+  runtimes. For each role that differs from the default, record its
+  runtime separately.
 
 Conditional:
 
@@ -283,7 +292,16 @@ mention them in the final summary.
 ### Step 5: write agents.config.json
 
 Based on `agents.config.example.json`, trimmed to selected roles and
-with `companyName` filled in.
+with `companyName` filled in. Include `runtime` for each agent:
+
+```json
+{ "id": "eng-bot", "alias": "@eng-bot", "role": "Engineer", "runtime": "claude", "chrome": false }
+{ "id": "eng-bot", "alias": "@eng-bot", "role": "Engineer", "runtime": "copilot" }
+```
+
+For `claude` runtime include `"chrome": false` (set `"chrome": true`
+for `marketing` only if it uses claude). For `copilot` runtime omit
+`chrome`.
 
 ### Step 5b: write the company brief
 
@@ -338,8 +356,13 @@ On rerun:
 
 ### Step 6: fill placeholders
 
-Global replace in each selected role's `agents/<id>/CLAUDE.md` and
-`agents/<id>/MEMORY.md`:
+For each selected role, determine its instruction file based on runtime:
+- `claude` runtime → fill `agents/<id>/CLAUDE.md` and `agents/<id>/MEMORY.md`
+- `copilot` runtime → fill `agents/<id>/AGENTS.md` and `agents/<id>/MEMORY.md`
+
+Both `CLAUDE.md` and `AGENTS.md` exist in `agents/TEMPLATE/` with the
+same placeholder tokens. Fill whichever matches the role's runtime;
+leave the other untouched.
 
 | Token | Value |
 |---|---|

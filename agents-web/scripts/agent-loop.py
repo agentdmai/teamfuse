@@ -1,39 +1,40 @@
 #!/usr/bin/env python3
-"""Long-lived per-agent Claude Code wrapper (persistent session + /clear).
+"""Long-lived per-agent runtime wrapper (persistent session + /clear).
 
-Replaces the per-tick fork model. Spawns `claude` ONCE per agent in
-stream-json I/O mode and feeds tick prompts through stdin. MCP
-connections, skills, and the cached system prompt all stay hot across
-ticks. A task-done sentinel (`.orchestrator/clear-session`) triggers a
-`/clear` slash command to wipe conversation history without dropping
-the session. A hard `.orchestrator/reset-session` sentinel respawns the
-whole claude process if something gets wedged.
+Supports multiple agent runtimes via the adapter pattern:
+  RUNTIME=claude   (default) — Claude Code CLI, persistent stream-json session
+  RUNTIME=copilot            — GitHub Copilot CLI, stateless per-tick
+
+Each runtime is implemented as a BaseAdapter subclass in ./runtimes/.
+agent-loop.py handles the common orchestration loop (signals, backoff,
+control files, logging) and delegates all runtime specifics to the adapter.
 
 Signals:
   SIGUSR1 — wake from sleep, run the next tick immediately
-  SIGTERM / SIGINT — graceful shutdown (sends /exit, waits, then kills)
+  SIGTERM / SIGINT — graceful shutdown
 
 Protocol files under ./.orchestrator/:
   did-work         — agent touches ⇒ wrapper resets sleep to MIN_SLEEP
-  clear-session    — agent touches ⇒ wrapper sends /clear before next tick
-  reset-session    — agent or orchestrator touches ⇒ full claude respawn
+  clear-session    — agent touches ⇒ wrapper clears history before next tick
+                     (full respawn if the runtime does not support in-session clear)
+  reset-session    — agent or orchestrator touches ⇒ full adapter respawn
   sleep.json       — current backoff state (dashboard reads)
   tools.json       — agent-written snapshot of live MCP tools
   agent-loop.log   — op log (wrapper + lifecycle hooks append here)
 
 env:
-  MIN_SLEEP        seconds after a productive tick (default 300)
+  RUNTIME          adapter to use: "claude" (default) or "copilot"
+  MIN_SLEEP        seconds after a productive tick (default 60)
   IDLE_STEP        added per idle tick              (default 60)
   MAX_SLEEP        ceiling on backoff               (default 3600)
   TIMEOUT_SECS     hard cap on a single turn        (default 600)
-  CLEAR_MIN_GAP    min seconds between /clear calls (default 600)
-  CHROME=1         launch claude --chrome (headed browser)
+  CHROME=1         (claude only) launch claude --chrome
+  COPILOT_MODEL    (copilot only) model name for the CLI
 """
 from __future__ import annotations
 
 import json
 import os
-import queue
 import signal
 import subprocess
 import sys
@@ -54,12 +55,11 @@ if not AGENT_DIR.is_dir():
     sys.exit(2)
 os.chdir(AGENT_DIR)
 
-MIN_SLEEP        = int(os.environ.get("MIN_SLEEP", "300"))
-IDLE_STEP        = int(os.environ.get("IDLE_STEP", "60"))
-MAX_SLEEP        = int(os.environ.get("MAX_SLEEP", "3600"))
-TIMEOUT_SECS     = int(os.environ.get("TIMEOUT_SECS", "600"))
-CLEAR_MIN_GAP    = int(os.environ.get("CLEAR_MIN_GAP", "600"))
-CHROME           = os.environ.get("CHROME", "") == "1"
+RUNTIME      = os.environ.get("RUNTIME", "claude").lower()
+MIN_SLEEP    = int(os.environ.get("MIN_SLEEP", "60"))
+IDLE_STEP    = int(os.environ.get("IDLE_STEP", "60"))
+MAX_SLEEP    = int(os.environ.get("MAX_SLEEP", "3600"))
+TIMEOUT_SECS = int(os.environ.get("TIMEOUT_SECS", "600"))
 
 ORCH_DIR    = AGENT_DIR / ".orchestrator"
 ORCH_DIR.mkdir(exist_ok=True)
@@ -70,7 +70,6 @@ CLEAR_FLAG  = ORCH_DIR / "clear-session"
 RESET_FLAG  = ORCH_DIR / "reset-session"
 SLEEP_JSON  = ORCH_DIR / "sleep.json"
 TOOLS_JSON  = ORCH_DIR / "tools.json"
-SETTINGS    = ORCH_DIR / "session-settings.json"
 
 SCRIPT_DIR  = Path(__file__).resolve().parent
 COST_SCRIPT = SCRIPT_DIR / "tick-cost.py"
@@ -110,214 +109,34 @@ def source_env() -> None:
             key, _, val = line.partition("=")
             key = key.strip()
             v = val.strip()
-            # strip matching surrounding quotes
             if (len(v) >= 2) and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
                 v = v[1:-1]
             if key:
                 os.environ[key] = v
 
 
-# ---------- Session settings (skills + lifecycle hooks) ----------
-def write_session_settings() -> list[str]:
-    skill_names: list[str] = []
-    skills_dir = AGENT_DIR / ".claude" / "skills"
-    if skills_dir.is_dir():
-        for d in sorted(skills_dir.iterdir()):
-            if d.is_dir() and (d / "SKILL.md").is_file():
-                skill_names.append(d.name)
+# ---------- Adapter loading ----------
+def load_adapter():
+    """Return the BaseAdapter subclass for the configured RUNTIME."""
+    # Add the scripts directory to the path so runtimes/ is importable.
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
 
-    # Strict skill isolation: always deny the Skill tool by default so the
-    # agent never inherits the operator's user-level skill library, and only
-    # allow the per-agent skills that live under ./.claude/skills/.
-    allow: list[str] = []
-    for n in skill_names:
-        allow.append(f"Skill({n})")
-        allow.append(f"Skill({n} *)")
-    settings: dict = {
-        "permissions": {"deny": ["Skill"], "allow": allow},
-        "hooks": {},
-    }
-
-    log_tpl = (
-        'date -u "+[%FT%TZ] hook:{event} — {note}" '
-        '>> ./.orchestrator/agent-loop.log 2>&1'
-    )
-    settings["hooks"] = {
-        "SessionStart": [{"matcher": "*", "hooks": [{
-            "type": "command",
-            "command": log_tpl.format(
-                event="SessionStart",
-                note="context + MCP + skills loading…"),
-        }]}],
-        "UserPromptSubmit": [{"matcher": "*", "hooks": [{
-            "type": "command",
-            "command": log_tpl.format(
-                event="UserPromptSubmit",
-                note="all loaded (CLAUDE.md + MCP + skills); running tick"),
-        }]}],
-    }
-    SETTINGS.write_text(json.dumps(settings, indent=2))
-    return skill_names
-
-
-# ---------- Claude process wrapper ----------
-class ClaudeSession:
-    """Long-lived `claude -p --input-format stream-json` subprocess."""
-
-    def __init__(self) -> None:
-        self.proc: subprocess.Popen | None = None
-        self.session_id: str | None = None
-        self.events: "queue.Queue[dict]" = queue.Queue()
-        self._stdout_thread: threading.Thread | None = None
-        self._stderr_thread: threading.Thread | None = None
-
-    def spawn(self, resume_id: str | None = None) -> None:
-        args = [
-            "claude", "--print", "--verbose",
-            "--input-format", "stream-json",
-            "--output-format", "stream-json",
-            "--include-partial-messages",
-            "--dangerously-skip-permissions",
-            "--model", "opusplan",
-        ]
-        # Strict MCP isolation: never inherit the operator's user-level
-        # servers. If the agent has its own .mcp.json we use it; otherwise
-        # we point at an empty file so `--strict-mcp-config` loads nothing.
-        mcp_path = AGENT_DIR / ".mcp.json"
-        if not mcp_path.is_file():
-            empty_mcp = ORCH_DIR / "empty-mcp.json"
-            if not empty_mcp.is_file():
-                empty_mcp.write_text('{"mcpServers":{}}')
-            mcp_path = empty_mcp
-        args += ["--mcp-config", str(mcp_path), "--strict-mcp-config"]
-        if SETTINGS.is_file():
-            args += ["--settings", str(SETTINGS)]
-        if CHROME:
-            args += ["--chrome"]
-        if resume_id:
-            args += ["--resume", resume_id]
-
-        log(f"spawning claude: {' '.join(args)}")
-        self.proc = subprocess.Popen(
-            args,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=0,
-            cwd=str(AGENT_DIR),
-            # New process group so supervisor can SIGTERM the whole tree.
-            start_new_session=False,  # we're already in wrapper's pgid
-        )
-        log(f"claude pid={self.proc.pid}")
-
-        self._stdout_thread = threading.Thread(
-            target=self._pump_stdout, daemon=True)
-        self._stderr_thread = threading.Thread(
-            target=self._pump_stderr, daemon=True)
-        self._stdout_thread.start()
-        self._stderr_thread.start()
-
-    def _pump_stdout(self) -> None:
-        assert self.proc and self.proc.stdout
-        try:
-            for raw in self.proc.stdout:
-                line = raw.decode("utf-8", "replace").strip()
-                if not line:
-                    continue
-                try:
-                    ev = json.loads(line)
-                except json.JSONDecodeError:
-                    # Non-JSON lines: log at info for visibility.
-                    log(f"claude stdout (non-json): {line[:200]}")
-                    continue
-                self.events.put(ev)
-        except Exception as e:  # noqa: BLE001
-            log(f"stdout pump error: {e}")
-        self.events.put({"type": "__eof__"})
-
-    def _pump_stderr(self) -> None:
-        assert self.proc and self.proc.stderr
-        try:
-            for raw in self.proc.stderr:
-                line = raw.decode("utf-8", "replace").rstrip()
-                if line:
-                    log(f"claude stderr: {line}")
-        except Exception:  # noqa: BLE001
-            pass
-
-    def is_alive(self) -> bool:
-        return bool(self.proc and (self.proc.poll() is None))
-
-    def send(self, prompt: str) -> bool:
-        if not (self.proc and self.proc.stdin):
-            return False
-        msg = {
-            "type": "user",
-            "message": {"role": "user", "content": prompt},
-        }
-        line = json.dumps(msg) + "\n"
-        try:
-            self.proc.stdin.write(line.encode("utf-8"))
-            self.proc.stdin.flush()
-            return True
-        except (BrokenPipeError, OSError) as e:
-            log(f"send failed: {e}")
-            return False
-
-    def wait_for_result(self, timeout: int) -> dict | None:
-        """Block until a 'result' event arrives (turn complete) or timeout."""
-        deadline = time.monotonic() + timeout
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                log(f"turn timeout after {timeout}s")
-                return None
-            try:
-                ev = self.events.get(timeout=min(remaining, 1.0))
-            except queue.Empty:
-                if not self.is_alive():
-                    log(f"claude exited during turn rc={self.proc.returncode if self.proc else '?'}")
-                    return None
-                continue
-
-            t = ev.get("type")
-            if t == "__eof__":
-                log("claude stdout EOF")
-                return None
-            if t == "system" and ev.get("subtype") == "init":
-                sid = ev.get("session_id")
-                if sid:
-                    self.session_id = sid
-                    log(f"session_id={sid}")
-            if t == "result":
-                # result event signals turn completion
-                return ev
-
-    def terminate(self) -> None:
-        if not self.proc:
-            return
-        try:
-            if self.proc.stdin:
-                self.proc.stdin.close()
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            self.proc.terminate()
-            self.proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            log("claude did not exit on SIGTERM, sending SIGKILL")
-            self.proc.kill()
-            try:
-                self.proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                pass
-        except Exception as e:  # noqa: BLE001
-            log(f"terminate error: {e}")
+    if RUNTIME == "copilot":
+        from runtimes.copilot_adapter import CopilotAdapter
+        return CopilotAdapter(AGENT_DIR, log)
+    if RUNTIME == "claude":
+        from runtimes.claude_adapter import ClaudeAdapter
+        return ClaudeAdapter(AGENT_DIR, log)
+    log(f"WARN: unknown RUNTIME={RUNTIME!r}, falling back to claude")
+    from runtimes.claude_adapter import ClaudeAdapter
+    return ClaudeAdapter(AGENT_DIR, log)
 
 
 # ---------- Tick prompts ----------
 FULL_TICK_PROMPT = (
-    "Polling tick (fresh session). Follow CLAUDE.md — that file owns what work you do.\n"
+    "Polling tick (fresh session). Follow your instructions file "
+    "(AGENTS.md or CLAUDE.md) — that file owns what work you do.\n"
     "\n"
     "SETUP (silent):\n"
     "1. Read ./MEMORY.md. HARD BUDGET: keep the whole file under 2 KB. MEMORY is "
@@ -333,13 +152,12 @@ FULL_TICK_PROMPT = (
     "Names only — do not include parameter schemas, descriptions, examples, or "
     "any other metadata. One line per tool.\n"
     "\n"
-    "Then run your polling loop per CLAUDE.md.\n"
+    "Then run your polling loop per your instructions file.\n"
     "\n"
     "END OF TICK: overwrite ./status.json.\n"
     " • If this task is FINISHED (no immediate follow-up needed), `touch "
     "./.orchestrator/clear-session` — the wrapper will wipe conversation history "
-    "before the next tick so context stays bounded. MCP/skills/CLAUDE.md all stay "
-    "loaded; only in-session turn history is cleared.\n"
+    "before the next tick so context stays bounded.\n"
     " • If you took any meaningful action this tick (sent a DM, triaged an email, "
     "moved a card, committed code, posted anywhere), `touch ./.orchestrator/did-work` "
     "so the orchestrator wakes you quickly for the next tick. An idle tick must NOT "
@@ -347,9 +165,9 @@ FULL_TICK_PROMPT = (
 )
 
 LIGHT_TICK_PROMPT = (
-    "Next polling tick (CLAUDE.md + MEMORY.md + tools already in context from "
+    "Next polling tick (instructions + MEMORY.md + tools already in context from "
     "the prior tick of this session). Do NOT re-read them unless something changed. "
-    "Follow CLAUDE.md.\n"
+    "Follow your instructions file.\n"
     "\n"
     "END OF TICK: overwrite ./status.json. If the task is FINISHED, `touch "
     "./.orchestrator/clear-session`. If you took any meaningful action, `touch "
@@ -419,44 +237,36 @@ def sleep_with_wake(seconds: int, reason: str) -> None:
 # ---------- Main loop ----------
 def main() -> None:
     source_env()
-    skills = write_session_settings()
-    if skills:
-        log(f"skill isolation active: only [{' '.join(skills)}] allowed")
-    log(f"lifecycle hooks + settings → {SETTINGS}")
+    log(f"agent-loop start pid={os.getpid()} cwd={AGENT_DIR} runtime={RUNTIME} "
+        f"min={MIN_SLEEP}s step={IDLE_STEP}s max={MAX_SLEEP}s timeout={TIMEOUT_SECS}s")
 
-    # Make sure MEMORY.md exists so the agent can always read it.
     memory_md = AGENT_DIR / "MEMORY.md"
     if not memory_md.exists():
         memory_md.touch()
 
-    # Clean stale flags from any prior run.
     for p in (DID_WORK, CLEAR_FLAG, RESET_FLAG, TOOLS_JSON):
         try:
             p.unlink()
         except FileNotFoundError:
             pass
 
-    log(f"agent-loop start pid={os.getpid()} cwd={AGENT_DIR} "
-        f"min={MIN_SLEEP}s step={IDLE_STEP}s max={MAX_SLEEP}s "
-        f"timeout={TIMEOUT_SECS}s clear-gap={CLEAR_MIN_GAP}s")
-
-    claude = ClaudeSession()
-    claude.spawn()
+    adapter = load_adapter()
+    adapter.spawn()
 
     current_sleep = MIN_SLEEP
-    fresh_context = True  # next tick needs the FULL setup prompt
+    fresh_context = True
     consecutive_failures = 0
-    last_clear_monotonic = 0.0  # rate-limit /clear so we don't re-setup every tick
 
     while not stop_event.is_set():
-        # Respawn if claude died between ticks.
-        if not claude.is_alive():
-            rc = claude.proc.returncode if claude.proc else "?"
-            log(f"claude process gone rc={rc} — respawning")
-            resume_id = claude.session_id
-            claude = ClaudeSession()
-            claude.session_id = resume_id
-            claude.spawn(resume_id=resume_id)
+        # Respawn if the adapter process died between ticks.
+        if not adapter.is_alive():
+            log(f"adapter process gone — respawning (runtime={RUNTIME})")
+            resume_id = adapter.session_id
+            adapter = load_adapter()
+            if resume_id:
+                adapter.spawn(resume_id=resume_id)
+            else:
+                adapter.spawn()
             fresh_context = True
             time.sleep(2)
             continue
@@ -472,46 +282,48 @@ def main() -> None:
                 CLEAR_FLAG.unlink()
             except FileNotFoundError:
                 pass
-            since = time.monotonic() - last_clear_monotonic
-            if last_clear_monotonic == 0.0 or since >= CLEAR_MIN_GAP:
-                log("clear-session flag → sending /clear (wipe conversation history)")
-                if claude.send("/clear"):
-                    # /clear is near-instant; give it a short window to flush.
-                    claude.wait_for_result(timeout=30)
-                fresh_context = True
-                last_clear_monotonic = time.monotonic()
-            else:
-                wait_left = int(CLEAR_MIN_GAP - since)
-                log(f"clear-session flag ignored (rate-limited, {wait_left}s left)")
 
-        # Hard-reset flag: full respawn (for when /clear isn't enough).
+            if adapter.supports_clear_session():
+                log("clear-session flag → clearing history (runtime supports in-session clear)")
+                adapter.clear_session()
+                fresh_context = True
+            else:
+                log("clear-session flag → full respawn (runtime is stateless per-tick)")
+                adapter.terminate()
+                adapter = load_adapter()
+                adapter.spawn()
+                fresh_context = True
+
+        # Hard-reset flag: full respawn regardless of runtime.
         if RESET_FLAG.exists():
-            log("reset-session flag → full claude respawn")
+            log("reset-session flag → full adapter respawn")
             try:
                 RESET_FLAG.unlink()
             except FileNotFoundError:
                 pass
-            claude.terminate()
-            claude = ClaudeSession()
-            claude.spawn()
+            adapter.terminate()
+            adapter = load_adapter()
+            adapter.spawn()
             fresh_context = True
             continue
 
         tick_start = time.time()
-        prompt = FULL_TICK_PROMPT if fresh_context else LIGHT_TICK_PROMPT
-        log(f"tick begin (fresh_context={fresh_context})")
+        # Stateless runtimes always get the full prompt (no in-session context to reuse).
+        use_full = fresh_context or not adapter.supports_clear_session()
+        prompt = FULL_TICK_PROMPT if use_full else LIGHT_TICK_PROMPT
+        log(f"tick begin (fresh_context={fresh_context}, runtime={RUNTIME})")
 
-        if not claude.send(prompt):
+        if not adapter.send(prompt):
             consecutive_failures += 1
             log(f"send failed; respawning (fails={consecutive_failures})")
-            claude.terminate()
-            claude = ClaudeSession()
-            claude.spawn()
+            adapter.terminate()
+            adapter = load_adapter()
+            adapter.spawn()
             fresh_context = True
             time.sleep(min(5 * consecutive_failures, 60))
             continue
 
-        result = claude.wait_for_result(timeout=TIMEOUT_SECS)
+        result = adapter.wait_for_result(timeout=TIMEOUT_SECS)
         fresh_context = False
 
         if result is None:
@@ -540,9 +352,8 @@ def main() -> None:
         log(f"tick took {elapsed}s; sleeping {current_sleep}s — {reason}")
         sleep_with_wake(current_sleep, reason)
 
-    # Shutdown.
-    log("shutting down claude session")
-    claude.terminate()
+    log("shutting down adapter session")
+    adapter.terminate()
     log("agent-loop exit")
 
 

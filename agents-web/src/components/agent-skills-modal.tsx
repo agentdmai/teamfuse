@@ -14,13 +14,15 @@ interface SkillRef {
   name: string;
   description: string;
   scope: "project" | "user";
+  skillsDir: string;
   path: string;
 }
 interface SkillsResponse {
   ok: boolean;
+  runtime: string;
   projectSkills: SkillRef[];
   userSkills: SkillRef[];
-  projectSkillsPath: string;
+  projectSkillDirs: string[];
   userSkillsPath: string;
   message?: string;
 }
@@ -121,23 +123,39 @@ export function AgentSkillsModal({ agentId, agentAlias, onClose }: Props) {
 
           <SkillGroup
             title="Project skills"
-            hint="agents/<id>/.claude/skills/ — the only skills this agent can invoke"
-            path={data?.projectSkillsPath}
+            hint={
+              data?.runtime === "copilot"
+                ? "Loaded from .claude/skills/, .github/skills/, or .agents/skills/ — whichever exist"
+                : "agents/<id>/.claude/skills/ — the only skills this agent can invoke"
+            }
+            paths={data?.projectSkillDirs}
             skills={project}
           />
 
           <section className="mb-2">
             <details className="text-[11px] text-muted-foreground">
               <summary className="cursor-pointer select-none">
-                User skills on disk ({user.length}) — blocked for this agent
+                User skills on disk ({user.length}) — may be blocked for this agent
               </summary>
               <p className="mt-1">
-                The wrapper generates a per-agent{" "}
-                <code>.orchestrator/skills-settings.json</code> that denies the
-                broad <code>Skill</code> tool and re-allows only the project
-                skills above. These live at{" "}
-                <code>{data?.userSkillsPath}</code> but are inert in this
-                agent&apos;s sessions.
+                {data?.runtime === "copilot" ? (
+                  <>
+                    Personal skills for copilot agents can live in{" "}
+                    <code>~/.copilot/skills/</code>,{" "}
+                    <code>~/.claude/skills/</code>, or{" "}
+                    <code>~/.agents/skills/</code>. The list above shows{" "}
+                    <code>~/.claude/skills/</code> only.
+                  </>
+                ) : (
+                  <>
+                    The wrapper generates a per-agent{" "}
+                    <code>.orchestrator/skills-settings.json</code> that denies
+                    the broad <code>Skill</code> tool and re-allows only the
+                    project skills above. These live at{" "}
+                    <code>{data?.userSkillsPath}</code>{" "}
+                    but are inert in this agent&apos;s sessions.
+                  </>
+                )}
               </p>
             </details>
           </section>
@@ -150,13 +168,13 @@ export function AgentSkillsModal({ agentId, agentAlias, onClose }: Props) {
 function SkillGroup({
   title,
   hint,
-  path,
+  paths,
   skills,
   mutedIfEmpty = false,
 }: {
   title: string;
   hint: string;
-  path?: string;
+  paths?: string[];
   skills: SkillRef[];
   mutedIfEmpty?: boolean;
 }) {
@@ -169,15 +187,16 @@ function SkillGroup({
           ({skills.length})
         </span>
       </h3>
-      <p className="text-[11px] text-muted-foreground mb-2">
-        {hint}
-        {path && (
-          <>
-            {" — "}
-            <code className="text-[10px]">{path}</code>
-          </>
-        )}
-      </p>
+      <p className="text-[11px] text-muted-foreground mb-1">{hint}</p>
+      {paths && paths.length > 0 && (
+        <ul className="mb-2 space-y-0.5">
+          {paths.map((p) => (
+            <li key={p}>
+              <code className="text-[10px] text-muted-foreground">{p}</code>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {empty ? (
         <div
@@ -197,7 +216,7 @@ function SkillGroup({
               <div className="flex items-center gap-2">
                 <span className="font-mono font-semibold">{s.name}</span>
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {s.scope}
+                  {s.skillsDir}
                 </span>
               </div>
               {s.description && (

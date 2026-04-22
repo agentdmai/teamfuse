@@ -44,6 +44,7 @@ interface AgentInfo {
   id: AgentId;
   alias: string;
   role: string;
+  runtime: "claude" | "copilot";
   workingDir: string;
   chrome: boolean;
 }
@@ -197,6 +198,21 @@ export function AgentBreaker({
               chrome
             </span>
           )}
+          <span
+            className={[
+              "rounded px-1 py-0.5 text-[9px] font-mono uppercase tracking-wider ring-1",
+              agent.runtime === "copilot"
+                ? "bg-sky-100 text-sky-800 ring-sky-200"
+                : "bg-violet-100 text-violet-800 ring-violet-200",
+            ].join(" ")}
+            title={
+              agent.runtime === "copilot"
+                ? "GitHub Copilot runtime"
+                : "Claude Code runtime"
+            }
+          >
+            {agent.runtime}
+          </span>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}

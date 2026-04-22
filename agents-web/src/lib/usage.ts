@@ -114,6 +114,19 @@ function sessionDirFor(agent: AgentDefinition): string {
   return path.join(os.homedir(), ".claude", "projects", slugFor(agent));
 }
 
+// Shape of one line in .orchestrator/usage.jsonl written by CopilotAdapter.
+interface CopilotUsageRecord {
+  ts: string;
+  session_id: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  reasoning_tokens: number;
+  premium_requests: number;
+}
+
 function emptyTotals(): UsageTotals {
   return {
     input_tokens: 0,
@@ -339,7 +352,127 @@ function readLastStartMs(agent: AgentDefinition): number | null {
 // buildGlobalWindow() can re-use it without re-parsing.
 const agentEventsCache = new WeakMap<AgentUsage, UsageEvent[]>();
 
-function readAgent(agent: AgentDefinition): AgentUsage {
+// ---------- Copilot agent usage (reads .orchestrator/usage.jsonl) ----------
+
+function readCopilotAgent(agent: AgentDefinition): AgentUsage {
+  const usageFile = path.join(agent.workingDir, ".orchestrator", "usage.jsonl");
+  const out: AgentUsage = {
+    agentId: agent.id,
+    sessionFiles: 1, // usage.jsonl counts as one file
+    sessions: 0,
+    lastActivity: null,
+    totals: emptyTotals(),
+    last24h: emptyTotals(),
+    byDay: [],
+    byModel: [],
+    rateLimits: [],
+    sessionDir: usageFile, // repurposed: shown in UI as "source path"
+    startedAtMs: readLastStartMs(agent),
+    sinceStart: null,
+  };
+
+  let text: string;
+  try {
+    text = fs.readFileSync(usageFile, "utf8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code !== "ENOENT") {
+      out.error = err instanceof Error ? err.message : String(err);
+    }
+    // ENOENT = agent never ran or no ticks yet — return zeros silently.
+    out.sessionFiles = 0;
+    agentEventsCache.set(out, []);
+    return out;
+  }
+
+  const byDay = new Map<string, UsageTotals>();
+  const byModel = new Map<string, UsageTotals>();
+  const sessionUuids = new Set<string>();
+  const allEvents: UsageEvent[] = [];
+  let lastTsMs = 0;
+
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    let rec: CopilotUsageRecord;
+    try {
+      rec = JSON.parse(line) as CopilotUsageRecord;
+    } catch {
+      continue;
+    }
+
+    // Map Copilot token field names → internal UsageTotals fields.
+    // cache_write_tokens is the equivalent of cache_creation_input_tokens.
+    const mapped: Record<string, unknown> = {
+      input_tokens: rec.input_tokens,
+      output_tokens: rec.output_tokens,
+      cache_creation_input_tokens: rec.cache_write_tokens,
+      cache_read_input_tokens: rec.cache_read_tokens,
+    };
+    addUsage(out.totals, mapped);
+
+    const tMs = rec.ts ? (Date.parse(rec.ts) || 0) : 0;
+    if (tMs > lastTsMs) lastTsMs = tMs;
+
+    const day = tMs ? new Date(tMs).toISOString().slice(0, 10) : null;
+    if (day) {
+      let b = byDay.get(day);
+      if (!b) { b = emptyTotals(); byDay.set(day, b); }
+      addUsage(b, mapped);
+    }
+
+    const model = rec.model || "unknown";
+    let mb = byModel.get(model);
+    if (!mb) { mb = emptyTotals(); byModel.set(model, mb); }
+    addUsage(mb, mapped);
+
+    if (rec.session_id) sessionUuids.add(rec.session_id);
+
+    if (tMs > 0) {
+      allEvents.push({
+        tsMs: tMs,
+        model,
+        input: rec.input_tokens,
+        output: rec.output_tokens,
+        cacheCreate: rec.cache_write_tokens,
+        cacheRead: rec.cache_read_tokens,
+        costUsd: 0, // Copilot doesn't expose USD cost
+      });
+    }
+  }
+
+  allEvents.sort((a, b) => a.tsMs - b.tsMs);
+  out.sessions = sessionUuids.size;
+  if (lastTsMs > 0) out.lastActivity = new Date(lastTsMs).toISOString();
+  out.byDay = recentBuckets(byDay, 14);
+  out.byModel = Array.from(byModel.entries())
+    .map(([model, t]) => ({ model, ...t }))
+    .sort((a, b) => b.input_tokens + b.output_tokens - (a.input_tokens + a.output_tokens));
+
+  const dayCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  for (const [day, t] of byDay) {
+    if (day >= dayCutoff) mergeTotals(out.last24h, t);
+  }
+
+  // Rate-limit events (same log parsing as Claude).
+  const logPath = path.join(agent.workingDir, ".orchestrator", "agent-loop.log");
+  const limits = parseRateLimits(logPath);
+  limits.sort((a, b) => (a.at < b.at ? 1 : -1));
+  out.rateLimits = limits.slice(0, 10);
+
+  if (out.startedAtMs != null) {
+    out.sinceStart = windowTotalsFor(allEvents, out.startedAtMs);
+  }
+
+  agentEventsCache.set(out, allEvents);
+  return out;
+}
+
+// ---------- Claude agent usage (reads ~/.claude/projects/<slug>/) ----------
+
+function readClaudeAgent(agent: AgentDefinition): AgentUsage {
   const dir = sessionDirFor(agent);
   const out: AgentUsage = {
     agentId: agent.id,
@@ -436,6 +569,12 @@ function readAgent(agent: AgentDefinition): AgentUsage {
 
   agentEventsCache.set(out, allEvents);
   return out;
+}
+
+function readAgent(agent: AgentDefinition): AgentUsage {
+  return agent.runtime === "copilot"
+    ? readCopilotAgent(agent)
+    : readClaudeAgent(agent);
 }
 
 export function readUsageReport(): UsageReport {

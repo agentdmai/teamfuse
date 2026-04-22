@@ -1,10 +1,17 @@
 # The streaming agent loop
 
-This doc explains `scripts/agent-loop.py`. It is the most important file
-in the template because it decides what "a Claude Code agent" means at
-runtime.
+This doc explains `scripts/agent-loop.py` and how it drives both
+supported runtimes. The loop itself is runtime-agnostic; what differs
+is the adapter each runtime uses underneath.
 
-## Why a persistent session
+| | `claude` | `copilot` |
+|---|---|---|
+| Session model | Persistent process, `/clear` between tasks | Stateless per-tick (`copilot -p`) |
+| Instruction file | `CLAUDE.md` | `AGENTS.md` |
+| Context continuity | Conversation history in-process | `--resume <session-id>` across ticks |
+| Cost source | `~/.claude/projects/<slug>/*.jsonl` | `.orchestrator/usage.jsonl` |
+
+## Why a persistent session (claude)
 
 Starting a fresh `claude` process every tick works for toy demos and
 falls apart in practice:
@@ -23,6 +30,15 @@ Conversation history accumulates, so the wrapper clears it between
 completed units of work via the `/clear` slash command. That drops
 conversation context while keeping MCP servers, skills, and the parsed
 `CLAUDE.md` loaded.
+
+## Why stateless per-tick (copilot)
+
+The Copilot CLI does not support a persistent streaming session. Each
+tick runs a fresh `copilot -p` invocation. To preserve context across
+ticks, the adapter passes `--resume <session-id>` from the previous
+tick. When an agent signals it is done with a task, it touches
+`.orchestrator/clear-session`, causing the adapter to drop the session
+ID so the next tick starts fresh. Durable state lives in `MEMORY.md`.
 
 ## The claude invocation
 
@@ -56,7 +72,29 @@ Flags that matter:
 * `--chrome`. Only set when `CHROME=1` is in the env (the supervisor
   passes this for agents with `chrome: true` in `agents.config.json`).
 
-## Stdin and stdout framing
+## The copilot invocation
+
+```
+copilot -p "<tick-prompt>" \
+        --resume <session-id> \
+        --additional-mcp-config @.mcp.json
+```
+
+Flags that matter:
+
+* `-p`. Non-interactive prompt mode. One invocation per tick.
+* `--resume <session-id>`. Passes the session ID from the previous
+  tick so the model has access to prior conversation history.
+  Omitted on first tick or after a `clear-session` signal.
+* `--additional-mcp-config @.mcp.json`. Loads per-agent MCP servers
+  on top of the user-level Copilot config.
+
+The adapter runs `copilot -p` as a subprocess, captures stdout (JSONL
+events), and returns when the process exits. Each tick is a blocking
+call; there is no persistent process to manage. The session ID is
+extracted from the JSONL output and passed to the next tick.
+
+## Stdin and stdout framing (claude)
 
 Input: one JSON line per user message.
 
@@ -75,16 +113,29 @@ Output: one JSON event per line. The wrapper cares about three types:
 
 All other event types (tool use, content deltas, partial messages) are
 drained but ignored. You can hook into them by editing the stdout
-pump in `ClaudeSession._pump_stdout`.
+pump in `ClaudeAdapter._pump_stdout`.
 
-## Thread model
+## JSONL output (copilot)
+
+The Copilot CLI writes one JSON event per line to stdout. The adapter
+captures the full output after the process exits. Key event types:
+
+* `{"type": "session.start", "data": {"sessionId": "<uuid>"}}`.
+  Session ID carried to the next tick as `--resume`.
+* `{"type": "message", "data": {"role": "assistant", "content": "..."}}`.
+  The assistant response. Logged with `> ` prefix to `agent-loop.log`.
+* `{"type": "session.shutdown", "data": {"modelMetrics": {...}}}`.
+  Present at end of session. Contains per-model token counts used for
+  usage tracking; written to `.orchestrator/usage.jsonl`.
+
+## Thread model (claude)
 
 ```
 main thread
  ├─ signal handlers (SIGUSR1, SIGTERM, SIGINT)
  ├─ tick loop: send() -> wait_for_result() -> sleep_with_wake()
  │
- │  owns: ClaudeSession.proc (Popen), events queue
+ │  owns: ClaudeAdapter.proc (Popen), events queue
  │
  ├─ _pump_stdout thread  (daemon)
  │     reads proc.stdout line by line
@@ -100,22 +151,34 @@ The main thread drives ticks. `wait_for_result(timeout)` blocks on the
 events queue and returns as soon as a `result` event arrives or the
 600-second cap expires. Nothing else consumes the queue.
 
+## Thread model (copilot)
+
+```
+main thread
+ ├─ signal handlers (SIGUSR1, SIGTERM, SIGINT)
+ └─ tick loop: send() -> wait_for_result() -> sleep_with_wake()
+       wait_for_result() runs copilot -p as a subprocess
+       reads stdout to completion, parses JSONL, returns
+       no background threads needed (process per tick)
+```
+
 ## Two tick prompts: FULL and LIGHT
 
-The first tick after a spawn uses `FULL_TICK_PROMPT`. It asks Claude
-to:
+Both runtimes use the same `FULL_TICK_PROMPT` / `LIGHT_TICK_PROMPT`
+constants from `agent-loop.py`. The first tick after a spawn (or fresh
+start for copilot) uses `FULL_TICK_PROMPT`. It asks the agent to:
 
 1. Read `./MEMORY.md`, hard budget 2KB. Consolidate when it grows.
 2. Check `./.orchestrator/tools.json`. If stale (over 60 min old),
    snapshot every `mcp__*` tool grouped by server.
-3. Run the polling loop per `CLAUDE.md`.
+3. Run the polling loop per `CLAUDE.md` (claude) or `AGENTS.md` (copilot).
 4. Overwrite `./status.json` at end of tick.
 5. `touch ./.orchestrator/clear-session` if the task is done.
 6. `touch ./.orchestrator/did-work` if the tick did anything
    meaningful.
 
-Subsequent ticks use `LIGHT_TICK_PROMPT`, which assumes `CLAUDE.md`,
-`MEMORY.md`, and tools are already in context and just says "run
+Subsequent ticks use `LIGHT_TICK_PROMPT`, which assumes the instruction
+file, `MEMORY.md`, and tools are already in context and just says "run
 another polling tick".
 
 ## Control files (`.orchestrator/`)
@@ -123,15 +186,16 @@ another polling tick".
 The agent writes these. The wrapper reads them before or after each
 tick.
 
-| File | Writer | Effect |
-|---|---|---|
-| `did-work` | agent | wrapper resets sleep to `MIN_SLEEP` |
-| `clear-session` | agent | wrapper sends `/clear` before next tick |
-| `reset-session` | agent or operator | wrapper respawns the whole claude process |
-| `sleep.json` | wrapper | dashboard reads: state, seconds, reason, sleep_until_epoch |
-| `tools.json` | agent | dashboard reads: current MCP tool inventory |
-| `session-settings.json` | wrapper | skills isolation and lifecycle hooks |
-| `agent-loop.log` | wrapper and hooks | append-only op log |
+| File | Writer | Effect | Runtimes |
+|---|---|---|---|
+| `did-work` | agent | wrapper resets sleep to `MIN_SLEEP` | both |
+| `clear-session` | agent | claude: wrapper sends `/clear` before next tick; copilot: wrapper drops `--resume` session ID | both |
+| `reset-session` | agent or operator | wrapper respawns the whole adapter | both |
+| `sleep.json` | wrapper | dashboard reads: state, seconds, reason, sleep_until_epoch | both |
+| `tools.json` | agent | dashboard reads: current MCP tool inventory | both |
+| `usage.jsonl` | copilot adapter | per-tick token usage records; read by the dashboard | copilot |
+| `session-settings.json` | wrapper | skills isolation and lifecycle hooks | claude only |
+| `agent-loop.log` | wrapper and hooks | append-only op log | both |
 
 ## Signals
 
@@ -160,36 +224,50 @@ quiet days and responsive when there is traffic.
 
 ## Crash recovery
 
-If the claude subprocess exits unexpectedly, the stdout pump enqueues
-`__eof__`, the tick returns `None`, and the wrapper respawns the
-process. If a `session_id` was captured before the crash, the respawn
-includes `--resume <session_id>` so the conversation is continued
-rather than started fresh.
+**claude:** If the claude subprocess exits unexpectedly, the stdout pump
+enqueues `__eof__`, the tick returns `None`, and the wrapper respawns
+the process. If a `session_id` was captured before the crash, the
+respawn includes `--resume <session_id>` so the conversation is
+continued rather than started fresh.
+
+**copilot:** Each tick is a fresh subprocess, so there is nothing to
+respawn. If `copilot -p` exits with a non-zero code, the adapter logs
+the error, returns an empty result, and the loop sleeps normally before
+the next tick. The previous `--resume` session ID is retained and tried
+again on the next tick.
 
 ## Cost accounting
 
-After every tick the wrapper invokes `scripts/tick-cost.py <agent_dir>
-<tick_start_epoch>`. That script walks the agent's session JSONL files
-under `~/.claude/projects/<slug>/`, filters events by mtime since the
-tick started, sums per-model token counts, applies current Anthropic
-pricing, and emits a one-line summary to the wrapper log.
+**claude:** After every tick the wrapper invokes `scripts/tick-cost.py
+<agent_dir> <tick_start_epoch>`. That script walks the agent's session
+JSONL files under `~/.claude/projects/<slug>/`, filters events by mtime
+since the tick started, sums per-model token counts, applies current
+Anthropic pricing, and emits a one-line summary to the wrapper log.
+The dashboard aggregates the same JSONLs for its usage panel.
 
-The dashboard aggregates the same JSONLs for its usage panel. Both the
-per-tick log line and the dashboard come from the same source of
-truth: the session transcripts Claude Code writes automatically.
+**copilot:** After every tick the adapter reads the Copilot session
+state file at `~/.copilot/session-state/<session-id>/events.jsonl`,
+extracts `modelMetrics` from the `session.shutdown` event, and appends
+a record to `.orchestrator/usage.jsonl`. The dashboard reads this file
+for its usage panel. Copilot does not expose a USD cost figure, so
+cost is reported as zero.
 
 ## Extending the loop
 
 Common extensions:
 
 * Swap the tick prompt. Edit `FULL_TICK_PROMPT` and
-  `LIGHT_TICK_PROMPT`.
-* Hook into other event types. Extend `_pump_stdout` to act on tool
-  uses or assistant deltas.
+  `LIGHT_TICK_PROMPT` in `agent-loop.py`.
+* Hook into other event types (claude). Extend `_pump_stdout` in
+  `ClaudeAdapter` to act on tool uses or assistant deltas.
 * Add a control file. Pick a new filename under `.orchestrator/` and
   check for its existence at the top of the tick.
-* Change the default model. Edit the `--model` flag in `spawn()` or
-  gate on an env var.
-* Add a lifecycle hook. `session-settings.json` already wires
+* Change the default model. Edit the invocation in the adapter's
+  `spawn()` (claude) or `wait_for_result()` (copilot), or gate on an
+  env var.
+* Add a lifecycle hook (claude). `session-settings.json` already wires
   `SessionStart` and `UserPromptSubmit`; add `ToolUse`, `Stop`, or
   `PreToolUse` as needed.
+* Add a new runtime. Create
+  `agents-web/scripts/runtimes/<name>_adapter.py` implementing
+  `BaseAdapter` and register the name as a valid `runtime` value.

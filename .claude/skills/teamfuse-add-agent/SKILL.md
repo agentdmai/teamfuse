@@ -46,9 +46,14 @@ Use `AskUserQuestion` one question at a time.
 * **Alias.** Default: `@<id>`. The AgentDM alias. Reject aliases that
   already appear in `agents.config.json.agents[].alias`.
 * **Role title.** Free text. Example: "Data Engineer", "Support".
-* **Chrome flag.** true or false. Default false. If true, the wrapper
-  launches `claude --chrome` for this agent. Only one agent at a time
-  should have this. Warn if another agent already has `chrome: true`.
+* **Runtime.** `claude` (default) or `copilot`. Claude agents use the
+  Claude Code CLI with a persistent stream-json session and `CLAUDE.md`.
+  Copilot agents use the GitHub Copilot CLI (stateless per-tick) with
+  `AGENTS.md` as the instruction file.
+* **Chrome flag.** Only applies to `claude` runtime. true or false.
+  Default false. If true, the wrapper launches `claude --chrome` for
+  this agent. Only one agent at a time should have this. Warn if another
+  agent already has `chrome: true`.
 * **Skills list.** Comma-separated. Example:
   `postgres-readonly, sql-auditor, etl`.
 * **Channel memberships.** Pick zero or more from the existing channels
@@ -100,13 +105,14 @@ cp -R agents/TEMPLATE agents/<id>
   has zero occurrences of `${AGENTDM_TOKEN}`; if one remains, stop and
   report the path. Keep the `.mcp.json.example` in place as a reference.
 * Rename `.env.example` to `.env`.
-* Write `AGENTDM_TOKEN=<key>` into the new `.env` too (the wrapper
-  sources `.env` before spawning `claude`, so other runtime code can
-  still read the token). Add any optional env vars the operator named
-  (empty values).
-* In the new `CLAUDE.md` and `MEMORY.md`, replace `<agent-alias>` with
-  the alias (without the `@`), `<agent-id>` with the id, and
-  `<role-title>` with the role.
+* Write `AGENTDM_TOKEN=<key>` into the new `.env`. Add any optional
+  env vars the operator named (empty values).
+* **Claude runtime:** in the new `CLAUDE.md` and `MEMORY.md`, replace
+  `<agent-alias>` with the alias (without the `@`), `<agent-id>` with
+  the id, and `<role-title>` with the role. Do the same in `AGENTS.md`
+  if present. Leave the other `<placeholder>` tokens untouched.
+* **Copilot runtime:** do the same substitutions in `AGENTS.md`. Remove
+  `CLAUDE.md` from the directory (not needed and avoids confusion).
 * Leave the other `<placeholder>` tokens untouched so the operator
   fills them later.
 
@@ -118,10 +124,16 @@ current members first via `list_channels` or the returned metadata.)
 
 ### Step 6: update agents.config.json
 
-Append a new entry to `agents`:
+Append a new entry to `agents`. Include `runtime` (omit `chrome` if not `claude`):
 
 ```json
-{ "id": "<id>", "alias": "@<alias>", "role": "<role>", "chrome": false }
+{ "id": "<id>", "alias": "@<alias>", "role": "<role>", "runtime": "<runtime>", "chrome": false }
+```
+
+For `copilot` runtime, omit `chrome`:
+
+```json
+{ "id": "<id>", "alias": "@<alias>", "role": "<role>", "runtime": "copilot" }
 ```
 
 Preserve the existing `companyName` and `agentsRoot`. Write atomically.
@@ -132,13 +144,14 @@ Preserve the existing `companyName` and `agentsRoot`. Write atomically.
 Agent @<alias> added.
 
 agents/<id>/                  skeleton copied, .env written
+Runtime: <claude|copilot>
 Skills: <comma-separated list>
 Channels: <comma-separated list>
 agents.config.json:          entry appended
 
 Next:
-  1. Open agents/<id>/CLAUDE.md and fill the remaining placeholders
-     (see the Bindings section).
+  1. Open agents/<id>/AGENTS.md (or CLAUDE.md for claude runtime) and
+     fill the remaining placeholders (see the Bindings section).
   2. Add any role-specific MCP servers to agents/<id>/.mcp.json.
   3. If the dashboard is running, refresh the page. A new breaker
      card appears (stopped).

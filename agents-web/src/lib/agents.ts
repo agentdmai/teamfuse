@@ -12,30 +12,46 @@ import path from "node:path";
 //     "companyName": "Your Company",
 //     "agentsRoot": "./agents",
 //     "agents": [
-//       { "id": "pm-bot", "alias": "@pm-bot", "role": "Product Manager", "chrome": false },
-//       ...
+//       { "id": "pm-bot", "alias": "@pm-bot", "role": "Product Manager",
+//         "runtime": "claude", "chrome": false },
+//       { "id": "copilot-eng", "alias": "@copilot-eng", "role": "Engineer",
+//         "runtime": "copilot" }
 //     ]
 //   }
 //
-// `chrome: true` means the wrapper launches `claude --chrome` (headed Chrome
-// via the Claude-in-Chrome extension). Only one agent should set this at a
-// time: they share the host's single Chrome instance and its login state.
+// `runtime` selects the agent-loop adapter.  Defaults to "claude".
+//   "claude"  — Claude Code CLI (stream-json, persistent session, CLAUDE.md auto-loaded)
+//   "copilot" — GitHub Copilot CLI (-p flag, JSONL output, AGENTS.md auto-loaded,
+//               --resume=<session-id> for cross-tick context continuity)
+//
+// `chrome: true` is Claude-only. Passes `--chrome` to the claude CLI so it
+// shares the host's single headed Chrome instance. Only one agent at a time.
+//
+// `instructionsFile` overrides the default instruction filename per runtime
+// (claude → CLAUDE.md, copilot → AGENTS.md). Rarely needed.
 
 export type AgentId = string;
+export type AgentRuntime = "claude" | "copilot";
 
 export interface AgentDefinition {
   id: AgentId;
   alias: string;
   role: string;
   workingDir: string;
+  runtime: AgentRuntime;
+  /** Claude-only: share the host's headed Chrome session. */
   chrome: boolean;
+  /** Override the default instructions filename for this agent's runtime. */
+  instructionsFile?: string;
 }
 
 interface RawAgent {
   id: string;
   alias: string;
   role: string;
+  runtime?: string;
   chrome?: boolean;
+  instructionsFile?: string;
 }
 
 interface RawConfig {
@@ -89,13 +105,19 @@ function loadConfig(): LoadedConfig {
     typeof parsed.agentsRoot === "string" ? parsed.agentsRoot : "./agents",
     configPath,
   );
-  const agents: AgentDefinition[] = (parsed.agents ?? []).map((a) => ({
-    id: a.id,
-    alias: a.alias,
-    role: a.role,
-    chrome: Boolean(a.chrome),
-    workingDir: path.join(agentsRoot, a.id),
-  }));
+  const agents: AgentDefinition[] = (parsed.agents ?? []).map((a) => {
+    const runtime: AgentRuntime =
+      a.runtime === "copilot" ? "copilot" : "claude";
+    return {
+      id: a.id,
+      alias: a.alias,
+      role: a.role,
+      runtime,
+      chrome: Boolean(a.chrome),
+      workingDir: path.join(agentsRoot, a.id),
+      ...(a.instructionsFile ? { instructionsFile: a.instructionsFile } : {}),
+    };
+  });
   cached = {
     companyName:
       typeof parsed.companyName === "string" && parsed.companyName.length > 0

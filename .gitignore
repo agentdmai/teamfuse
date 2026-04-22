@@ -44,7 +44,8 @@ agents/*/postman/envs/*.json
 agents/*/postman/globals.json
 agents/*/repos/
 
-# The bootstrap flow writes these; starter kit ships only *.example versions
+
+# The bootstrap flow writes this; starter kit ships only agents.config.example.json
 agents.config.json
 .mcp.json
 agents/*/.mcp.json
@@ -55,3 +56,10 @@ agents/*/.mcp.json
 
 # Archived agents from /teamfuse-remove-agent
 agents/.archive/
+
+
+# python cache
+*__pycache__
+
+# everything in agent2...
+agents2/*

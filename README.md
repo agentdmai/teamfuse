@@ -10,9 +10,8 @@ orchestrated by a local Next.js control panel shaped like an electrical
 load center. Boot the whole company from a single `/teamfuse-init`
 prompt.
 
-**Site:** [teamfuse.dev](https://teamfuse.dev) for the full docs and
-landing page. The site lives under [`website/`](website/) in this repo
-and auto-syncs with the README and `docs/` on every build.
+**Homapage:** [teamfuse.dev](https://teamfuse.dev) for the full docs and
+landing page.
 
 ## What it looks like
 

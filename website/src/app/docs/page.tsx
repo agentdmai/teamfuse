@@ -59,7 +59,6 @@ export default async function DocsIndex() {
         dashboard. Every page is generated from the markdown in the repo,
         so it stays in sync with the code.
       </p>
-
       <ul className="mt-12 grid gap-4">
         {docs.map((d) => (
           <li key={d.slug}>

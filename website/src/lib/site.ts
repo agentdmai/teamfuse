@@ -8,6 +8,12 @@ export const SITE = {
   repo: "https://github.com/agentdmai/teamfuse",
   agentdm: "https://agentdm.ai",
   twitter: "@agentdm",
+  // To add or change Google Analytics / Google Ads tags, edit this array.
+  // Each entry is a GA4 measurement ID (G-XXXX) or Ads conversion ID (AW-XXXX).
+  // The first entry is loaded as the gtag.js source; every entry gets a `gtag('config', id)` call.
+  analytics: {
+    gaTags: ["G-72W61P93QS"] as readonly string[],
+  },
   keywords: [
     "Claude Code",
     "Claude agents",

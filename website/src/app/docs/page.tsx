@@ -23,19 +23,21 @@ export default async function DocsIndex() {
   const docs = await listDocs();
   return (
     <div className="mx-auto max-w-4xl px-6 py-16">
-      <div className="flex items-center gap-2 text-sm text-slate-400">
-        <BookOpen className="h-4 w-4" />
-        <span>Documentation</span>
+      <div className="text-center">
+        <div className="inline-flex items-center gap-2 text-sm text-slate-400">
+          <BookOpen className="h-4 w-4" />
+          <span>Documentation</span>
+        </div>
+        <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-50">
+          teamfuse docs
+        </h1>
+        <p className="mt-4 text-lg text-slate-300">
+          Everything you need to stand up a team of Claude Code agents, wire
+          them into a real messaging layer, and run them from a local
+          dashboard. Every page is generated from the markdown in the repo,
+          so it stays in sync with the code.
+        </p>
       </div>
-      <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-50">
-        teamfuse docs
-      </h1>
-      <p className="mt-4 text-lg text-slate-300">
-        Everything you need to stand up a team of Claude Code agents, wire
-        them into a real messaging layer, and run them from a local
-        dashboard. Every page is generated from the markdown in the repo,
-        so it stays in sync with the code.
-      </p>
 
       <ul className="mt-12 grid gap-4">
         {docs.map((d) => (

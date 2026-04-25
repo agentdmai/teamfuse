@@ -16,7 +16,6 @@ export default function LandingPage() {
   return (
     <>
       <Hero />
-      <LogoBand />
       <FeatureGrid />
       <Screenshots />
       <HowItWorks />
@@ -85,24 +84,6 @@ function Hero() {
   );
 }
 
-function LogoBand() {
-  return (
-    <section aria-label="Powered by" className="border-y border-panel-700 bg-panel-800/40">
-      <div className="mx-auto max-w-6xl px-6 py-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm text-slate-400 font-mono">
-        <span>Claude Code</span>
-        <span className="text-panel-600">·</span>
-        <span>Model Context Protocol</span>
-        <span className="text-panel-600">·</span>
-        <span>AgentDM</span>
-        <span className="text-panel-600">·</span>
-        <span>Next.js</span>
-        <span className="text-panel-600">·</span>
-        <span>Python</span>
-      </div>
-    </section>
-  );
-}
-
 function FeatureGrid() {
   const features = [
     {
@@ -138,7 +119,7 @@ function FeatureGrid() {
   ];
   return (
     <section className="mx-auto max-w-6xl px-6 py-20" aria-labelledby="features-h">
-      <div className="max-w-3xl">
+      <div className="mx-auto max-w-3xl text-center">
         <div className="text-xs font-semibold uppercase tracking-[0.22em] text-bolt-400/80">
           What you get
         </div>
@@ -177,7 +158,7 @@ function Screenshots() {
       aria-labelledby="screens-h"
       className="mx-auto max-w-6xl px-6 py-10 space-y-16"
     >
-      <div className="max-w-3xl">
+      <div className="mx-auto max-w-3xl text-center">
         <div className="text-xs font-semibold uppercase tracking-[0.22em] text-bolt-400/80">
           What it looks like
         </div>
@@ -249,7 +230,7 @@ function HowItWorks() {
       aria-labelledby="how-h"
     >
       <div className="mx-auto max-w-6xl px-6 py-20">
-        <div className="max-w-3xl">
+        <div className="mx-auto max-w-3xl text-center">
           <div className="text-xs font-semibold uppercase tracking-[0.22em] text-bolt-400/80">
             How it works
           </div>
@@ -278,7 +259,7 @@ function HowItWorks() {
             </li>
           ))}
         </ol>
-        <p className="mt-10 text-sm text-slate-400">
+        <p className="mt-10 text-sm text-slate-400 text-center">
           Full writeup in{" "}
           <Link
             href="/docs/architecture"
@@ -320,7 +301,7 @@ function CommandsSection() {
   ];
   return (
     <section aria-labelledby="commands-h" className="mx-auto max-w-6xl px-6 py-20">
-      <div className="max-w-3xl">
+      <div className="mx-auto max-w-3xl text-center">
         <div className="text-xs font-semibold uppercase tracking-[0.22em] text-bolt-400/80">
           Commands
         </div>

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { SITE } from "@/lib/site";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
+import { Analytics } from "@/components/analytics";
+import { CookieConsent } from "@/components/cookie-consent";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -81,6 +83,8 @@ export default function RootLayout({
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />
+        <CookieConsent />
+        <Analytics />
       </body>
     </html>
   );

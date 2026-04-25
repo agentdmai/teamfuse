@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookOpen, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { listDocs } from "@/lib/docs";
 import { SITE } from "@/lib/site";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export const dynamic = "force-static";
 
@@ -21,24 +22,43 @@ export const metadata: Metadata = {
 
 export default async function DocsIndex() {
   const docs = await listDocs();
+
+  const itemListLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "teamfuse documentation",
+    itemListOrder: "https://schema.org/ItemListOrderAscending",
+    numberOfItems: docs.length,
+    itemListElement: docs.map((d, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      url: `${SITE.url}${d.path}`,
+      name: d.title,
+      description: d.description,
+    })),
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-16">
-      <div className="text-center">
-        <div className="inline-flex items-center gap-2 text-sm text-slate-400">
-          <BookOpen className="h-4 w-4" />
-          <span>Documentation</span>
-        </div>
-        <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-50">
-          teamfuse docs
-        </h1>
-        <p className="mt-4 text-lg text-slate-300">
-          Everything you need to stand up a team of Claude Code agents, wire
-          them into a real messaging layer, and run them from a local
-          dashboard. Every page is generated from the markdown in the repo,
-          so it stays in sync with the code.
-        </p>
-      </div>
-
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }}
+      />
+      <Breadcrumbs
+        items={[
+          { name: "Home", href: "/" },
+          { name: "Docs" },
+        ]}
+      />
+      <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-50">
+        teamfuse docs
+      </h1>
+      <p className="mt-4 text-lg text-slate-300">
+        Everything you need to stand up a team of Claude Code agents, wire
+        them into a real messaging layer, and run them from a local
+        dashboard. Every page is generated from the markdown in the repo,
+        so it stays in sync with the code.
+      </p>
       <ul className="mt-12 grid gap-4">
         {docs.map((d) => (
           <li key={d.slug}>

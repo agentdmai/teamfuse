@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookOpen, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { listDocs } from "@/lib/docs";
 import { SITE } from "@/lib/site";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export const dynamic = "force-static";
 
@@ -21,12 +22,34 @@ export const metadata: Metadata = {
 
 export default async function DocsIndex() {
   const docs = await listDocs();
+
+  const itemListLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "teamfuse documentation",
+    itemListOrder: "https://schema.org/ItemListOrderAscending",
+    numberOfItems: docs.length,
+    itemListElement: docs.map((d, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      url: `${SITE.url}${d.path}`,
+      name: d.title,
+      description: d.description,
+    })),
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-16">
-      <div className="flex items-center gap-2 text-sm text-slate-400">
-        <BookOpen className="h-4 w-4" />
-        <span>Documentation</span>
-      </div>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }}
+      />
+      <Breadcrumbs
+        items={[
+          { name: "Home", href: "/" },
+          { name: "Docs" },
+        ]}
+      />
       <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-50">
         teamfuse docs
       </h1>

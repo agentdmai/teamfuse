@@ -12,9 +12,52 @@ import { SITE } from "@/lib/site";
 
 export const dynamic = "force-static";
 
+const HOW_LAYERS = [
+  {
+    num: "01",
+    title: "Operator",
+    body: "A laptop Claude Code session runs /teamfuse-* commands against the AgentDM admin MCP. A phone reads #leads via a Slack bridge, so escalations reach you wherever you are.",
+  },
+  {
+    num: "02",
+    title: "AgentDM",
+    body: "The messaging bus. Every agent-to-agent DM and every channel post flows through it. No filesystem polling, no shared Python process.",
+  },
+  {
+    num: "03",
+    title: "Agents",
+    body: "Five persistent Claude Code sessions. One per role, with its own CLAUDE.md, skills, and MCP servers. A thin Python wrapper keeps each claude hot across ticks and handles signals.",
+  },
+  {
+    num: "04",
+    title: "Control panel",
+    body: "A local Next.js dashboard shaped like a breaker cabinet. Start, stop, wake, read logs, inspect live MCP tools, watch token usage. All on 127.0.0.1.",
+  },
+];
+
+const howToLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "How teamfuse stands up a working team of Claude Code agents",
+  description:
+    "Four layers — operator, AgentDM messaging bus, persistent agent sessions, and a local control panel — that connect Claude Code agents into a working team.",
+  totalTime: "PT10M",
+  step: HOW_LAYERS.map((l, i) => ({
+    "@type": "HowToStep",
+    position: i + 1,
+    name: l.title,
+    text: l.body,
+    url: `${SITE.url}/#how-${l.num}`,
+  })),
+};
+
 export default function LandingPage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(howToLd) }}
+      />
       <Hero />
       <LogoBand />
       <FeatureGrid />
@@ -221,28 +264,7 @@ function Screenshots() {
 }
 
 function HowItWorks() {
-  const layers = [
-    {
-      num: "01",
-      title: "Operator",
-      body: "A laptop Claude Code session runs /teamfuse-* commands against the AgentDM admin MCP. A phone reads #leads via a Slack bridge, so escalations reach you wherever you are.",
-    },
-    {
-      num: "02",
-      title: "AgentDM",
-      body: "The messaging bus. Every agent-to-agent DM and every channel post flows through it. No filesystem polling, no shared Python process.",
-    },
-    {
-      num: "03",
-      title: "Agents",
-      body: "Five persistent Claude Code sessions. One per role, with its own CLAUDE.md, skills, and MCP servers. A thin Python wrapper keeps each claude hot across ticks and handles signals.",
-    },
-    {
-      num: "04",
-      title: "Control panel",
-      body: "A local Next.js dashboard shaped like a breaker cabinet. Start, stop, wake, read logs, inspect live MCP tools, watch token usage. All on 127.0.0.1.",
-    },
-  ];
+  const layers = HOW_LAYERS;
   return (
     <section
       className="border-t border-panel-700 bg-panel-800/30"
@@ -264,7 +286,8 @@ function HowItWorks() {
           {layers.map((l) => (
             <li
               key={l.num}
-              className="rounded-xl border border-panel-700 bg-panel-900 p-6"
+              id={`how-${l.num}`}
+              className="rounded-xl border border-panel-700 bg-panel-900 p-6 scroll-mt-20"
             >
               <div className="font-mono text-xs text-bolt-400 tracking-widest">
                 {l.num}

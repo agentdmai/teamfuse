@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
-import { getDoc, listDocs } from "@/lib/docs";
+import { getDoc, getDocMtime, listDocs } from "@/lib/docs";
 import { Markdown } from "@/components/markdown";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SITE } from "@/lib/site";
 
 export const dynamic = "force-static";
@@ -44,6 +45,10 @@ export default async function DocPage(
   const prev = idx > 0 ? all[idx - 1] : null;
   const next = idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;
 
+  const mtime = await getDocMtime(slug);
+  const isoDate = (mtime ?? new Date()).toISOString();
+  const wordCount = doc.body.trim().split(/\s+/).filter(Boolean).length;
+
   const articleJsonLd = {
     "@context": "https://schema.org",
     "@type": "TechArticle",
@@ -54,9 +59,19 @@ export default async function DocPage(
       "@type": "Organization",
       name: "AgentDM",
       url: SITE.agentdm,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE.url}/icon.svg`,
+      },
     },
     mainEntityOfPage: `${SITE.url}/docs/${doc.slug}`,
     url: `${SITE.url}/docs/${doc.slug}`,
+    image: `${SITE.url}/opengraph-image`,
+    inLanguage: "en-US",
+    articleSection: "Documentation",
+    datePublished: isoDate,
+    dateModified: isoDate,
+    wordCount,
   };
 
   return (
@@ -65,12 +80,14 @@ export default async function DocPage(
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
       />
-      <nav className="mb-8 text-sm">
-        <Link href="/docs" className="text-slate-400 hover:text-slate-200">
-          ← All docs
-        </Link>
-      </nav>
-      <header>
+      <Breadcrumbs
+        items={[
+          { name: "Home", href: "/" },
+          { name: "Docs", href: "/docs" },
+          { name: doc.title },
+        ]}
+      />
+      <header className="mt-6">
         <h1 className="text-4xl font-bold tracking-tight text-slate-50">
           {doc.title}
         </h1>

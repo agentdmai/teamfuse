@@ -25,6 +25,14 @@ export const metadata: Metadata = {
     title: `${SITE.title}, ${SITE.tagline}`,
     description: SITE.description,
     locale: "en_US",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: `${SITE.title}, ${SITE.tagline}`,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -32,6 +40,12 @@ export const metadata: Metadata = {
     creator: SITE.twitter,
     title: `${SITE.title}, ${SITE.tagline}`,
     description: SITE.description,
+    images: [
+      {
+        url: "/opengraph-image",
+        alt: `${SITE.title}, ${SITE.tagline}`,
+      },
+    ],
   },
   robots: {
     index: true,
@@ -58,19 +72,73 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const jsonLd = {
+  const organizationLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${SITE.url}/#organization`,
+    name: "AgentDM",
+    url: SITE.agentdm,
+    logo: `${SITE.url}/icon.svg`,
+    sameAs: [SITE.repo, SITE.agentdm],
+  };
+
+  const websiteLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${SITE.url}/#website`,
+    name: SITE.name,
+    url: SITE.url,
+    description: SITE.description,
+    inLanguage: "en-US",
+    publisher: { "@id": `${SITE.url}/#organization` },
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: `${SITE.url}/docs?q={search_term_string}`,
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
+
+  const softwareLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
+    "@id": `${SITE.url}/#software`,
     name: SITE.name,
     description: SITE.description,
     url: SITE.url,
     applicationCategory: "DeveloperApplication",
     operatingSystem: "macOS, Linux",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+    },
     license: "https://opensource.org/licenses/MIT",
     codeRepository: SITE.repo,
     programmingLanguage: ["TypeScript", "Python"],
-    author: { "@type": "Organization", name: "AgentDM", url: SITE.agentdm },
+    author: { "@id": `${SITE.url}/#organization` },
+    publisher: { "@id": `${SITE.url}/#organization` },
+    image: `${SITE.url}/opengraph-image`,
+    screenshot: [
+      `${SITE.url}/screenshots/control-panel.svg`,
+      `${SITE.url}/screenshots/agentdm-network.svg`,
+    ],
+    featureList: [
+      "Persistent streaming Claude Code sessions per agent",
+      "Agent-to-agent direct messaging over AgentDM",
+      "Local breaker-cabinet style control panel dashboard",
+      "One-command bootstrap via /teamfuse-init",
+      "Pluggable Kanban boards: GitHub Projects, Linear, Jira, Trello, Notion",
+      "Runs across multiple machines with no shared filesystem",
+    ],
+  };
+
+  const graphLd = {
+    "@context": "https://schema.org",
+    "@graph": [organizationLd, websiteLd, softwareLd],
   };
 
   return (
@@ -78,7 +146,7 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(graphLd) }}
         />
         <Header />
         <main className="flex-1">{children}</main>

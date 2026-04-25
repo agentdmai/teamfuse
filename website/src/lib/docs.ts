@@ -115,6 +115,15 @@ export async function getDoc(slug: string): Promise<Doc | null> {
   }
 }
 
+export async function getDocMtime(slug: string): Promise<Date | null> {
+  try {
+    const stat = await fs.stat(path.join(DOCS_DIR, `${slug}.md`));
+    return stat.mtime;
+  } catch {
+    return null;
+  }
+}
+
 export async function getReadme(): Promise<string> {
   const raw = await fs.readFile(README_PATH, "utf8");
   const { content } = matter(raw);

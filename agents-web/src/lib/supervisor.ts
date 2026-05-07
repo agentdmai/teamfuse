@@ -1,14 +1,45 @@
 import "server-only";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/db/client";
 import { getAgent, type AgentId } from "@/lib/agents";
 
-// Resolved once at module load. process.cwd() is the Next.js server's cwd,
-// which is the agents-web project root in dev and in `next start`.
-const LOOP_SCRIPT = path.resolve(process.cwd(), "scripts/agent-loop.sh");
+// Resolve the `agentdm` CLI binary. All loop logic lives in the CLI now;
+// this supervisor just spawns it once per agent with AGENTDM_SUPERVISED=1
+// and observes the .orchestrator/ control files the CLI writes.
+//
+// Lookup order:
+//   1. AGENTDM_BIN env var (for local dev against an unpublished CLI checkout)
+//   2. node_modules/.bin/agentdm (resolved via `agentdm/package.json`)
+//   3. PATH (assumes the user `npm i -g agentdm` or has `npx agentdm` available)
+const requireFromHere = createRequire(import.meta.url);
+
+function resolveAgentdmBin(): { command: string; baseArgs: string[] } {
+  const fromEnv = process.env.AGENTDM_BIN;
+  if (fromEnv && fromEnv.trim().length > 0) {
+    return { command: fromEnv, baseArgs: [] };
+  }
+  try {
+    // require.resolve gives us the path to package.json's main file —
+    // we walk up to .bin/agentdm, the symlink npm installs.
+    const pkgJson = requireFromHere.resolve("agentdm/package.json");
+    const pkgRoot = path.dirname(pkgJson);
+    const localBin = path.resolve(pkgRoot, "..", ".bin", "agentdm");
+    if (fs.existsSync(localBin)) {
+      return { command: localBin, baseArgs: [] };
+    }
+    // Fall back to invoking the entrypoint directly via node.
+    return { command: process.execPath, baseArgs: [path.join(pkgRoot, "src", "index.js")] };
+  } catch {
+    // Not installed locally; fall back to npx (slower, requires network on first run).
+    return { command: "npx", baseArgs: ["-y", "agentdm"] };
+  }
+}
+
+const AGENTDM = resolveAgentdmBin();
 
 export interface AgentSleepInfo {
   state: "sleeping" | "tick";
@@ -135,10 +166,6 @@ export function startAgent(id: AgentId): StartResult {
       `missing instructions file (${instructionsFile}) in ${agent.workingDir}`,
     );
   }
-  if (!fs.existsSync(LOOP_SCRIPT)) {
-    throw new Error(`loop script missing: ${LOOP_SCRIPT}`);
-  }
-
   const logDir = path.join(agent.workingDir, ".orchestrator");
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, "agent-loop.log");
@@ -147,14 +174,16 @@ export function startAgent(id: AgentId): StartResult {
   // detached:true gives the child its own session (setsid), so child.pid is
   // also the pgid — lets stop() kill the wrapper + any running `claude`
   // with a single process.kill(-pid, ...).
-  // CHROME=1 signals the wrapper to pass `--chrome` to `claude`, enabling
-  // the headed browser session via the Claude-in-Chrome extension.
-  const child = spawn("bash", [LOOP_SCRIPT, agent.workingDir], {
+  // AGENTDM_SUPERVISED=1 puts the CLI in the long-lived per-agent mode
+  // (persistent claude session, /clear between tasks, .orchestrator/* control
+  // files, SIGUSR1 wake, adaptive backoff). CHROME=1 enables Claude-in-Chrome.
+  const child = spawn(AGENTDM.command, [...AGENTDM.baseArgs, "start", agent.workingDir], {
     cwd: agent.workingDir,
     detached: true,
     stdio: ["ignore", out, out],
     env: {
       ...process.env,
+      AGENTDM_SUPERVISED: "1",
       RUNTIME: agent.runtime,
       ...(agent.chrome && agent.runtime === "claude" ? { CHROME: "1" } : {}),
     },
@@ -162,7 +191,7 @@ export function startAgent(id: AgentId): StartResult {
   child.unref();
 
   if (!child.pid) {
-    throw new Error("failed to spawn agent-loop.sh (no pid)");
+    throw new Error("failed to spawn agentdm CLI (no pid)");
   }
 
   const startedAt = Date.now();

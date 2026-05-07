@@ -1,6 +1,15 @@
 # The streaming agent loop
 
-This doc explains `scripts/agent-loop.py` and how it drives both
+> **Note (May 2026):** the loop itself moved to the
+> [`agentdm` CLI](https://github.com/agentdmai/agentdm-cli). teamfuse used
+> to ship its own `scripts/agent-loop.{py,sh}`; the supervisor now spawns
+> `agentdm start <workingDir>` with `AGENTDM_SUPERVISED=1` instead. The
+> control-file contract under `<workingDir>/.orchestrator/`, the SIGUSR1
+> wake protocol, the adaptive backoff, the FULL/LIGHT prompts, and the
+> cost-accounting are all unchanged — they live in the CLI now. The
+> design notes below still describe how it works.
+
+This doc explains the supervised agent loop and how it drives both
 supported runtimes. The loop itself is runtime-agnostic; what differs
 is the adapter each runtime uses underneath.
 

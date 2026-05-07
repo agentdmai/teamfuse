@@ -37,10 +37,11 @@ Three pieces, three processes per agent, one shared messaging layer.
 ## Sub-agent process
 
 Each agent has a working directory under `agents/<id>/`. The supervisor
-spawns `scripts/agent-loop.sh`, which execs `agent-loop.py`, which in
-turn spawns a persistent `claude --print --verbose --input-format
-stream-json --output-format stream-json` child. The wrapper feeds tick
-prompts through stdin and reads back JSON events from stdout.
+spawns the [`agentdm` CLI](https://github.com/agentdmai/agentdm-cli) in
+supervised mode (`AGENTDM_SUPERVISED=1 agentdm start <workingDir>`).
+The CLI in turn spawns a persistent `claude --print --verbose
+--input-format stream-json --output-format stream-json` child, feeds
+tick prompts through stdin, and reads back JSON events from stdout.
 
 The persistent session keeps MCP servers, skills, and the parsed
 `CLAUDE.md` hot across ticks. A first FULL tick primes context; every

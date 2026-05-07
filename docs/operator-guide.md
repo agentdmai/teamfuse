@@ -12,10 +12,12 @@ stopped.
 
 ## Starting and stopping
 
-Each card has mini breaker buttons. Start spawns
-`scripts/agent-loop.sh <workingDir>` detached. Stop sends SIGTERM to
-the whole process group, then SIGKILL after 5 seconds. The dashboard
-reconciles pid liveness on every request via `process.kill(pid, 0)`.
+Each card has mini breaker buttons. Start spawns the
+[`agentdm` CLI](https://github.com/agentdmai/agentdm-cli) in supervised
+mode (`AGENTDM_SUPERVISED=1 agentdm start <workingDir>`) detached. Stop
+sends SIGTERM to the whole process group, then SIGKILL after 5 seconds.
+The dashboard reconciles pid liveness on every request via
+`process.kill(pid, 0)`.
 
 Master breaker (top right) kills every agent. Press again to restart
 them all from scratch.
